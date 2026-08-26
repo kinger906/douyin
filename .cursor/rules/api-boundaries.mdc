@@ -1,0 +1,15 @@
+---
+description: API conventions for Nitro handlers and shared contracts
+globs: apps/admin/server/**/*.ts
+alwaysApply: false
+---
+
+# API Boundaries
+
+- Put new public endpoints under `apps/admin/server/api/v1`.
+- Keep routing versioned and resource-oriented. Do not add unversioned API paths.
+- Validate request bodies, params, and query values with Zod, preferring shared schemas from `@douyin/shared`.
+- Use `useDb()` from `apps/admin/server/utils/db` instead of creating direct database clients inside handlers.
+- Return stable error payloads through `sendAppError()`.
+- Keep handler logic thin when possible by moving reusable logic into `server/utils`.
+- Preserve the core boundary: only Nitro talks to Neon, and clients talk to Nitro over HTTP.

@@ -1,0 +1,16 @@
+---
+description: Core monorepo rules for this Douyin MVP
+alwaysApply: true
+---
+
+# Monorepo Rules
+
+- Use `pnpm` for installs, scripts, filtering, and workspace execution.
+- Keep the repo shape intact: apps in `apps/*`, reusable packages in `packages/*`, module stubs in `packages/modules/*`.
+- Treat `apps/admin` as the only runtime that may reach Postgres through `@douyin/db`.
+- Never add database credentials, direct SQL, or `@douyin/db` imports to `apps/mobile`.
+- Reuse contracts from `@douyin/shared` and API wrappers from `@douyin/api-client` before introducing duplicate types.
+- Keep live, shop, and notifications features behind `featureFlags`.
+- When changing documented behavior, update `README.md` or the relevant file in `docs/`.
+- Prefer targeted verification first, then run `pnpm test`, `pnpm typecheck`, and `pnpm --filter @douyin/admin build` before finishing repo-wide work.
+- Do not commit `.superpowers/`.
