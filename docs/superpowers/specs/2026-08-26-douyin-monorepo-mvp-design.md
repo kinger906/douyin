@@ -167,8 +167,8 @@ No automatic re-approve path in MVP; rejected stays rejected unless manually re-
 1. Register with email + password (phone optional field reserved).
 2. Login returns short-lived access JWT + refresh token.
 3. Refresh token stored hashed in DB; rotation on refresh.
-4. Mobile: access/refresh in SecureStore; `Authorization: Bearer`.
-5. Admin UI: httpOnly secure cookie session wrapping same token model (or cookie holding refresh + memory access). MVP may use Bearer for both if cookie wiring delays slice; prefer cookie for Admin SSR.
+4. Mobile: access/refresh in SecureStore; requests send `Authorization: Bearer <access>`.
+5. Admin UI (SSR): refresh token in httpOnly secure cookie; access token kept short-lived in memory (or short-lived cookie). Nitro auth middleware accepts either Bearer or valid Admin cookie so one handler stack serves both clients.
 
 ### Upload
 
