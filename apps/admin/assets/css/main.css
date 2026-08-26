@@ -1,0 +1,21 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+/* Ant Design–like primary blue */
+@theme static {
+  --color-primary-50: #e6f4ff;
+  --color-primary-100: #bae0ff;
+  --color-primary-200: #91caff;
+  --color-primary-300: #69b1ff;
+  --color-primary-400: #4096ff;
+  --color-primary-500: #1677ff;
+  --color-primary-600: #0958d9;
+  --color-primary-700: #003eb3;
+  --color-primary-800: #002c8c;
+  --color-primary-900: #001d66;
+  --color-primary-950: #001140;
+}
+
+body {
+  @apply bg-slate-100 text-slate-800 antialiased;
+}

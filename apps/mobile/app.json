@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "@douyin/mobile",
+    "name": "仿抖音App",
     "slug": "douyin-mobile",
     "version": "0.0.0",
     "orientation": "portrait",

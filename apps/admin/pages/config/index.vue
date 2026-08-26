@@ -6,6 +6,7 @@ type ConfigResponse = {
 };
 
 const { request } = useAdminApi();
+const toast = useToast();
 
 const configKey = 'featureFlags';
 const valueText = ref('');
@@ -13,21 +14,17 @@ const updatedAt = ref<string | null>(null);
 const isLoading = ref(false);
 const isSaving = ref(false);
 const errorMessage = ref('');
-const successMessage = ref('');
 
 async function loadConfig() {
   isLoading.value = true;
   errorMessage.value = '';
-  successMessage.value = '';
-
   try {
     const response = await request<ConfigResponse>(`/api/v1/admin/config/${configKey}`);
     valueText.value = JSON.stringify(response.value ?? {}, null, 2);
     updatedAt.value = response.updatedAt;
   } catch (error) {
     errorMessage.value =
-      (error as { data?: { error?: { message?: string } } }).data?.error?.message ??
-      'Failed to load config';
+      (error as { data?: { error?: { message?: string } } }).data?.error?.message ?? '加载配置失败';
   } finally {
     isLoading.value = false;
   }
@@ -35,26 +32,22 @@ async function loadConfig() {
 
 async function saveConfig() {
   errorMessage.value = '';
-  successMessage.value = '';
   isSaving.value = true;
-
   try {
     const parsedValue = JSON.parse(valueText.value);
     const response = await request<ConfigResponse>(`/api/v1/admin/config/${configKey}`, {
       method: 'PUT',
       body: { value: parsedValue },
     });
-
     valueText.value = JSON.stringify(response.value ?? {}, null, 2);
     updatedAt.value = response.updatedAt;
-    successMessage.value = 'Config saved';
+    toast.add({ title: '保存成功', color: 'success' });
   } catch (error) {
     if (error instanceof SyntaxError) {
-      errorMessage.value = 'Config must be valid JSON';
+      errorMessage.value = '请输入合法 JSON';
     } else {
       errorMessage.value =
-        (error as { data?: { error?: { message?: string } } }).data?.error?.message ??
-        'Failed to save config';
+        (error as { data?: { error?: { message?: string } } }).data?.error?.message ?? '保存失败';
     }
   } finally {
     isSaving.value = false;
@@ -65,61 +58,30 @@ onMounted(loadConfig);
 </script>
 
 <template>
-  <section>
-    <h1 style="margin: 0 0 8px">Config</h1>
-    <p style="margin: 0; color: #4b5563">
-      Edit the `featureFlags` system config as raw JSON.
-    </p>
-
-    <p v-if="updatedAt" style="margin-top: 12px; color: #6b7280">
-      Updated at {{ new Date(updatedAt).toLocaleString() }}
-    </p>
-    <p v-if="errorMessage" style="margin-top: 12px; color: #b91c1c">
-      {{ errorMessage }}
-    </p>
-    <p v-if="successMessage" style="margin-top: 12px; color: #15803d">
-      {{ successMessage }}
-    </p>
-    <p v-if="isLoading" style="margin-top: 12px">Loading config...</p>
-
-    <div v-else style="margin-top: 16px">
-      <textarea
-        v-model="valueText"
-        rows="14"
-        style="
-          width: 100%;
-          padding: 12px;
-          border: 1px solid #d1d5db;
-          border-radius: 12px;
-          font-family: Consolas, monospace;
-          background: white;
-        "
-      />
-
-      <div style="display: flex; gap: 12px; margin-top: 16px">
-        <button
-          type="button"
-          :disabled="isSaving"
-          style="
-            padding: 10px 14px;
-            border: none;
-            border-radius: 8px;
-            background: #111827;
-            color: white;
-            cursor: pointer;
-          "
-          @click="saveConfig"
-        >
-          {{ isSaving ? 'Saving...' : 'Save config' }}
-        </button>
-        <button
-          type="button"
-          style="padding: 10px 14px; border: 1px solid #d1d5db; border-radius: 8px; background: white"
-          @click="loadConfig"
-        >
-          Reload
-        </button>
-      </div>
+  <div class="space-y-4 max-w-3xl">
+    <div>
+      <h2 class="text-xl font-semibold text-slate-900">系统配置</h2>
+      <p class="text-sm text-slate-500 mt-1">
+        编辑功能开关 <code class="text-xs bg-slate-200 px-1 rounded">featureFlags</code>（直播 / 电商 / 推送等）。
+      </p>
     </div>
-  </section>
+
+    <UAlert v-if="errorMessage" color="error" variant="subtle" :title="errorMessage" />
+    <p v-if="updatedAt" class="text-xs text-slate-400">
+      最近更新：{{ new Date(updatedAt).toLocaleString('zh-CN') }}
+    </p>
+
+    <UCard class="ring-1 ring-slate-200">
+      <div v-if="isLoading" class="py-12 flex justify-center">
+        <UIcon name="i-lucide-loader-circle" class="size-8 animate-spin text-primary-500" />
+      </div>
+      <template v-else>
+        <UTextarea v-model="valueText" :rows="14" class="w-full font-mono text-sm" />
+        <div class="flex gap-2 mt-4">
+          <UButton :loading="isSaving" icon="i-lucide-save" @click="saveConfig">保存配置</UButton>
+          <UButton color="neutral" variant="soft" @click="loadConfig">重新加载</UButton>
+        </div>
+      </template>
+    </UCard>
+  </div>
 </template>

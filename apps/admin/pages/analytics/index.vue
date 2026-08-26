@@ -15,30 +15,25 @@ const isLoading = ref(false);
 const errorMessage = ref('');
 
 const cards = computed(() => {
-  if (!summary.value) {
-    return [];
-  }
-
+  if (!summary.value) return [];
   return [
-    { label: 'Users', value: summary.value.users },
-    { label: 'Pending videos', value: summary.value.videosPending },
-    { label: 'Approved videos', value: summary.value.videosApproved },
-    { label: 'Rejected videos', value: summary.value.videosRejected },
-    { label: 'Likes', value: summary.value.likes },
-    { label: 'Comments', value: summary.value.comments },
+    { label: '用户总数', value: summary.value.users },
+    { label: '待审核视频', value: summary.value.videosPending },
+    { label: '已通过视频', value: summary.value.videosApproved },
+    { label: '已拒绝视频', value: summary.value.videosRejected },
+    { label: '点赞总量', value: summary.value.likes },
+    { label: '评论总量', value: summary.value.comments },
   ];
 });
 
 async function loadSummary() {
   isLoading.value = true;
   errorMessage.value = '';
-
   try {
     summary.value = await request<AnalyticsSummary>('/api/v1/admin/analytics/summary');
   } catch (error) {
     errorMessage.value =
-      (error as { data?: { error?: { message?: string } } }).data?.error?.message ??
-      'Failed to load analytics';
+      (error as { data?: { error?: { message?: string } } }).data?.error?.message ?? '加载数据失败';
   } finally {
     isLoading.value = false;
   }
@@ -48,45 +43,28 @@ onMounted(loadSummary);
 </script>
 
 <template>
-  <section>
-    <div
-      style="display: flex; justify-content: space-between; gap: 16px; align-items: center; flex-wrap: wrap"
-    >
+  <div class="space-y-4">
+    <div class="flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 style="margin: 0 0 8px">Analytics</h1>
-        <p style="margin: 0; color: #4b5563">Current platform totals from the database.</p>
+        <h2 class="text-xl font-semibold text-slate-900">数据分析</h2>
+        <p class="text-sm text-slate-500 mt-1">实时统计平台用户与内容互动规模。</p>
       </div>
-      <button
-        type="button"
-        style="padding: 10px 14px; border: 1px solid #d1d5db; border-radius: 8px; background: white"
-        @click="loadSummary"
-      >
-        Refresh
-      </button>
+      <UButton color="neutral" variant="soft" icon="i-lucide-refresh-cw" :loading="isLoading" @click="loadSummary">
+        刷新
+      </UButton>
     </div>
 
-    <p v-if="errorMessage" style="margin-top: 16px; color: #b91c1c">
-      {{ errorMessage }}
-    </p>
-    <p v-else-if="isLoading" style="margin-top: 16px">Loading analytics...</p>
+    <UAlert v-if="errorMessage" color="error" variant="subtle" :title="errorMessage" />
 
-    <div
-      v-else-if="summary"
-      style="
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 16px;
-        margin-top: 20px;
-      "
-    >
-      <article
-        v-for="card in cards"
-        :key="card.label"
-        style="background: white; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08)"
-      >
-        <div style="font-size: 14px; color: #6b7280">{{ card.label }}</div>
-        <div style="font-size: 32px; font-weight: 700; margin-top: 8px">{{ card.value }}</div>
-      </article>
+    <div v-if="isLoading" class="py-16 flex justify-center">
+      <UIcon name="i-lucide-loader-circle" class="size-8 animate-spin text-primary-500" />
     </div>
-  </section>
+
+    <div v-else class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+      <UCard v-for="card in cards" :key="card.label" class="ring-1 ring-slate-200">
+        <div class="text-sm text-slate-500">{{ card.label }}</div>
+        <div class="text-3xl font-semibold text-slate-900 mt-2 tabular-nums">{{ card.value }}</div>
+      </UCard>
+    </div>
+  </div>
 </template>

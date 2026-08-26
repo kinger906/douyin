@@ -1,6 +1,40 @@
 export default defineNuxtConfig({
   compatibilityDate: '2024-11-01',
   devtools: { enabled: true },
+  modules: ['@nuxt/ui'],
+  css: ['~/assets/css/main.css'],
+  colorMode: {
+    preference: 'light',
+    fallback: 'light',
+  },
+  ui: {
+    colors: {
+      primary: 'blue',
+      neutral: 'slate',
+    },
+  },
+  // Avoid Google Fonts timeouts in mainland China
+  fonts: {
+    defaults: {
+      weights: [400, 500, 600, 700],
+    },
+    providers: {
+      google: false,
+      googleicons: false,
+    },
+  },
+  icon: {
+    serverBundle: 'local',
+    clientBundle: {
+      scan: true,
+    },
+  },
+  app: {
+    head: {
+      title: '抖音管理后台',
+      htmlAttrs: { lang: 'zh-CN' },
+    },
+  },
   runtimeConfig: {
     databaseUrl: process.env.DATABASE_URL || '',
     jwtAccessSecret: process.env.JWT_ACCESS_SECRET || '',

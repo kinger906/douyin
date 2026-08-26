@@ -6,8 +6,8 @@ definePageMeta({
 const { login } = useAdminSession();
 
 const form = reactive({
-  email: '',
-  password: '',
+  email: 'admin@example.com',
+  password: 'Admin123!',
 });
 const isSubmitting = ref(false);
 const errorMessage = ref('');
@@ -23,7 +23,7 @@ async function handleSubmit() {
     errorMessage.value =
       (error as { data?: { error?: { message?: string } } }).data?.error?.message ??
       (error as Error).message ??
-      'Login failed';
+      '登录失败，请检查账号密码';
   } finally {
     isSubmitting.value = false;
   }
@@ -31,69 +31,48 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <main
-    style="
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #f3f4f6;
-      font-family: Arial, sans-serif;
-    "
-  >
-    <form
-      style="
-        width: 100%;
-        max-width: 360px;
-        background: white;
-        padding: 24px;
-        border-radius: 12px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
-      "
-      @submit.prevent="handleSubmit"
-    >
-      <h1 style="margin: 0 0 8px">Admin Login</h1>
-      <p style="margin: 0 0 20px; color: #4b5563">Sign in with an admin account.</p>
+  <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 via-slate-50 to-blue-50 px-4">
+    <UCard class="w-full max-w-md shadow-lg ring-1 ring-slate-200">
+      <template #header>
+        <div class="flex items-center gap-3">
+          <div class="size-10 rounded-lg bg-primary-500 text-white flex items-center justify-center font-bold">
+            抖
+          </div>
+          <div>
+            <div class="font-semibold text-slate-900">抖音管理后台</div>
+            <div class="text-xs text-slate-500">请使用管理员账号登录</div>
+          </div>
+        </div>
+      </template>
 
-      <label style="display: block; margin-bottom: 12px">
-        <span style="display: block; margin-bottom: 6px">Email</span>
-        <input
-          v-model="form.email"
-          type="email"
-          required
-          style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px"
+      <form class="space-y-4" @submit.prevent="handleSubmit">
+        <UFormField label="邮箱">
+          <UInput v-model="form.email" type="email" required icon="i-lucide-mail" placeholder="admin@example.com" class="w-full" />
+        </UFormField>
+
+        <UFormField label="密码">
+          <UInput
+            v-model="form.password"
+            type="password"
+            required
+            icon="i-lucide-lock"
+            placeholder="请输入密码"
+            class="w-full"
+          />
+        </UFormField>
+
+        <UAlert
+          v-if="errorMessage"
+          color="error"
+          variant="subtle"
+          icon="i-lucide-circle-alert"
+          :title="errorMessage"
         />
-      </label>
 
-      <label style="display: block; margin-bottom: 16px">
-        <span style="display: block; margin-bottom: 6px">Password</span>
-        <input
-          v-model="form.password"
-          type="password"
-          required
-          style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px"
-        />
-      </label>
-
-      <p v-if="errorMessage" style="margin: 0 0 12px; color: #b91c1c">
-        {{ errorMessage }}
-      </p>
-
-      <button
-        type="submit"
-        :disabled="isSubmitting"
-        style="
-          width: 100%;
-          padding: 10px 14px;
-          border: none;
-          border-radius: 8px;
-          background: #111827;
-          color: white;
-          cursor: pointer;
-        "
-      >
-        {{ isSubmitting ? 'Signing in...' : 'Sign in' }}
-      </button>
-    </form>
-  </main>
+        <UButton type="submit" block size="lg" :loading="isSubmitting">
+          登录
+        </UButton>
+      </form>
+    </UCard>
+  </div>
 </template>
