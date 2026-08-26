@@ -104,6 +104,7 @@ pnpm db:seed
 ```
 
 Production admin/API deploy is described in [`docs/deployment.md`](docs/deployment.md) (GitHub Actions → Vercel).
+Android preview APK via EAS is also documented there (API: `https://douyin-seven-wine.vercel.app`).
 
 ## Vertical Slice Demo
 

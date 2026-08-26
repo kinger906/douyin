@@ -8,7 +8,9 @@
     "android": "expo run:android --port 8082",
     "ios": "expo run:ios --port 8082",
     "web": "expo start --web --port 8082",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "eas-build-pre-install": "cd ../.. && pnpm install --frozen-lockfile",
+    "build:android:preview": "eas build -p android --profile preview"
   },
   "dependencies": {
     "@douyin/api-client": "workspace:*",
@@ -35,6 +37,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "eas-cli": "^16.28.0",
     "typescript": "~6.0.3"
   }
 }

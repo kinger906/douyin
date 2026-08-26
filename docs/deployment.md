@@ -120,3 +120,37 @@ pnpm --filter @douyin/admin build
 ```
 
 Do not commit `.vercel/` (local link metadata). Keep all production secrets in GitHub Secrets only.
+
+## Mobile: EAS Android APK (preview)
+
+Production API used by the cloud build:
+
+```text
+https://douyin-seven-wine.vercel.app
+```
+
+Config lives in `apps/mobile/eas.json` (`preview` profile → Android **APK**, `EXPO_PUBLIC_API_BASE` baked in).
+
+### One-time setup
+
+```bash
+pnpm install
+cd apps/mobile
+pnpm exec eas login
+pnpm exec eas build:configure
+```
+
+`eas build:configure` links the app on expo.dev and writes `extra.eas.projectId` into `app.json`. Commit that change.
+
+### Build APK in the cloud
+
+From `apps/mobile`:
+
+```bash
+pnpm build:android:preview
+# same as: pnpm exec eas build -p android --profile preview
+```
+
+When the build finishes, open the Expo build page and download the `.apk`, then install on a device.
+
+Local `apps/mobile/.env` stays for Metro/dev (LAN IP). EAS preview builds **do not** use that file for API base; they use the URL in `eas.json`.
