@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
-import { ResizeMode, Video } from 'expo-av';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useVideoPlayer, VideoView } from 'expo-video';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -38,6 +38,23 @@ type FeedCardProps = {
   onToggleLike: (item: FeedItem) => void;
 };
 
+function FeedVideo({ uri, isActive }: { uri: string; isActive: boolean }) {
+  const player = useVideoPlayer(uri, (instance) => {
+    instance.loop = true;
+    instance.muted = false;
+  });
+
+  useEffect(() => {
+    if (isActive) {
+      player.play();
+    } else {
+      player.pause();
+    }
+  }, [isActive, player]);
+
+  return <VideoView contentFit="cover" nativeControls={false} player={player} style={StyleSheet.absoluteFill} />;
+}
+
 function FeedCard({ item, height, isActive, isNeighbor, onToggleLike }: FeedCardProps) {
   const queryClient = useQueryClient();
   const [showComments, setShowComments] = useState(false);
@@ -73,16 +90,7 @@ function FeedCard({ item, height, isActive, isNeighbor, onToggleLike }: FeedCard
     <View style={[styles.slide, { height }]}>
       <View style={styles.mediaSurface}>
         {shouldMountVideo ? (
-          <Video
-            isLooping
-            isMuted={false}
-            posterSource={item.coverUrl ? { uri: item.coverUrl } : undefined}
-            posterStyle={StyleSheet.absoluteFill}
-            resizeMode={ResizeMode.COVER}
-            shouldPlay={isActive}
-            source={{ uri: item.blobUrl }}
-            style={StyleSheet.absoluteFill}
-          />
+          <FeedVideo isActive={isActive} uri={item.blobUrl} />
         ) : (
           <Image contentFit="cover" source={item.coverUrl ?? FALLBACK_COVER} style={StyleSheet.absoluteFill} />
         )}

@@ -42,6 +42,7 @@ export default function LoginScreen() {
         <Text style={styles.eyebrow}>Douyin MVP</Text>
         <Text style={styles.title}>Login</Text>
         <Text style={styles.subtitle}>Use the seeded admin or a registered user.</Text>
+        <Text style={styles.debugText}>API: {mobileApi.apiBaseUrl}</Text>
 
         <TextInput
           autoCapitalize="none"
@@ -112,6 +113,11 @@ const styles = StyleSheet.create({
   subtitle: {
     color: '#b7b7b7',
     fontSize: 14,
+  },
+  debugText: {
+    color: '#6b7280',
+    fontSize: 12,
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
   },
   input: {
     borderWidth: 1,

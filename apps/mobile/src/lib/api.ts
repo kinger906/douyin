@@ -10,6 +10,7 @@ import {
   type UnlikeResponse,
   type VideoRecord,
 } from '@douyin/api-client';
+import * as FileSystem from 'expo-file-system/legacy';
 
 import { useSessionStore } from '@/store/session';
 
@@ -125,34 +126,47 @@ async function uploadVideoBlob(
   asset: { uri: string; fileName?: string | null; mimeType?: string | null },
 ): Promise<UploadBlobResponse> {
   const accessToken = useSessionStore.getState().accessToken;
-  const formData = new FormData();
+  const fileName = asset.fileName ?? `${ticket.pathname.split('/').pop() ?? 'upload.mp4'}`;
+  const mimeType = asset.mimeType ?? 'video/mp4';
 
-  formData.append('pathname', ticket.pathname);
-  formData.append(
-    'file',
+  // React Native fetch + FormData `{ uri, name, type }` throws
+  // "Unsupported FormDataPart implementation" on modern Expo/Android.
+  // Use FileSystem multipart upload instead.
+  const result = await FileSystem.uploadAsync(
+    `${apiBaseUrl}/api/v1/uploads/blob/proxy`,
+    asset.uri,
     {
-      uri: asset.uri,
-      name: asset.fileName ?? `${ticket.pathname.split('/').pop() ?? 'upload.mp4'}`,
-      type: asset.mimeType ?? 'video/mp4',
-    } as any,
+      httpMethod: 'POST',
+      uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+      fieldName: 'file',
+      mimeType,
+      parameters: {
+        pathname: ticket.pathname,
+      },
+      headers: {
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        // Helps some servers associate original filename
+        'Upload-Filename': fileName,
+      },
+    },
   );
 
-  const response = await fetch(`${apiBaseUrl}/api/v1/uploads/blob/proxy`, {
-    method: 'POST',
-    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
-    body: formData,
-  });
-
-  if (!response.ok) {
-    const payload = parseErrorPayload(await response.json().catch(() => null));
+  if (result.status < 200 || result.status >= 300) {
+    let payload: unknown = null;
+    try {
+      payload = JSON.parse(result.body);
+    } catch {
+      // ignore parse errors
+    }
+    const parsed = parseErrorPayload(payload);
     throw new ApiClientError(
-      payload?.code ?? 'INTERNAL',
-      payload?.message ?? response.statusText,
-      response.status,
+      parsed?.code ?? 'INTERNAL',
+      parsed?.message ?? `Upload failed (${result.status})`,
+      result.status,
     );
   }
 
-  return (await response.json()) as UploadBlobResponse;
+  return JSON.parse(result.body) as UploadBlobResponse;
 }
 
 export const mobileApi = {
