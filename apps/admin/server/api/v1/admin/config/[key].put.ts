@@ -2,9 +2,16 @@ import { systemConfigs } from '@douyin/db';
 import { AppError, ErrorCode } from '@douyin/shared';
 import { eq } from 'drizzle-orm';
 import { defineEventHandler, getRouterParam, readBody } from 'h3';
+import { z } from 'zod';
 import { requireAdmin } from '~/server/utils/auth';
 import { useDb } from '~/server/utils/db';
 import { sendAppError } from '~/server/utils/errors';
+
+const featureFlagsSchema = z.object({
+  live: z.coerce.boolean(),
+  shop: z.coerce.boolean(),
+  notifications: z.coerce.boolean(),
+});
 
 function readConfigValue(body: unknown) {
   if (!body || typeof body !== 'object' || !Reflect.has(body, 'value')) {
@@ -12,6 +19,23 @@ function readConfigValue(body: unknown) {
   }
 
   return Reflect.get(body, 'value');
+}
+
+function validateConfigValue(key: string, value: unknown) {
+  if (key !== 'featureFlags') {
+    return value;
+  }
+
+  const parsedValue = featureFlagsSchema.safeParse(value);
+  if (!parsedValue.success) {
+    throw new AppError(
+      ErrorCode.VALIDATION_FAILED,
+      parsedValue.error.issues[0]?.message ?? 'Invalid featureFlags config',
+      400,
+    );
+  }
+
+  return parsedValue.data;
 }
 
 export default defineEventHandler(async (event) => {
@@ -23,7 +47,7 @@ export default defineEventHandler(async (event) => {
       throw new AppError(ErrorCode.VALIDATION_FAILED, 'Config key is required', 400);
     }
 
-    const value = readConfigValue(await readBody(event));
+    const value = validateConfigValue(key, readConfigValue(await readBody(event)));
     const now = new Date();
 
     await useDb()

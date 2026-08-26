@@ -44,7 +44,7 @@ async function moderateVideo(id: string, action: 'approve' | 'reject') {
       : '';
 
   try {
-    await request(`/api/v1/admin/videos/${id}/${action}`, {
+    await request(`/api/v1/admin/moderation/videos/${id}/${action}`, {
       method: 'POST',
       body: reason ? { reason } : {},
     });
