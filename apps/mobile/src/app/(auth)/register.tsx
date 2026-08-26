@@ -18,8 +18,7 @@ function getErrorMessage(error: unknown) {
   if (error instanceof Error) {
     return error.message;
   }
-
-  return 'Something went wrong. Please try again.';
+  return '注册失败，请稍后重试';
 }
 
 export default function RegisterScreen() {
@@ -40,13 +39,12 @@ export default function RegisterScreen() {
       style={styles.screen}
     >
       <View style={styles.card}>
-        <Text style={styles.eyebrow}>Douyin MVP</Text>
-        <Text style={styles.title}>Register</Text>
-        <Text style={styles.subtitle}>Create a user, then upload and interact with approved videos.</Text>
+        <Text style={styles.logo}>注册</Text>
+        <Text style={styles.subtitle}>创建账号后即可发视频、点赞和评论</Text>
 
         <TextInput
           onChangeText={setDisplayName}
-          placeholder="Display name"
+          placeholder="昵称"
           placeholderTextColor="#7a7a7a"
           style={styles.input}
           value={displayName}
@@ -55,14 +53,14 @@ export default function RegisterScreen() {
           autoCapitalize="none"
           keyboardType="email-address"
           onChangeText={setEmail}
-          placeholder="Email"
+          placeholder="邮箱"
           placeholderTextColor="#7a7a7a"
           style={styles.input}
           value={email}
         />
         <TextInput
           onChangeText={setPassword}
-          placeholder="Password"
+          placeholder="密码（至少 8 位）"
           placeholderTextColor="#7a7a7a"
           secureTextEntry
           style={styles.input}
@@ -81,12 +79,12 @@ export default function RegisterScreen() {
           {registerMutation.isPending ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.buttonText}>Create account</Text>
+            <Text style={styles.buttonText}>注册</Text>
           )}
         </Pressable>
 
         <Link href="/(auth)/login" style={styles.link}>
-          Already registered? Login
+          已有账号？去登录
         </Link>
       </View>
     </KeyboardAvoidingView>
@@ -106,16 +104,10 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: '#161616',
   },
-  eyebrow: {
-    color: '#fe2c55',
-    fontSize: 13,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  title: {
+  logo: {
     color: '#fff',
     fontSize: 32,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   subtitle: {
     color: '#b7b7b7',
@@ -132,7 +124,7 @@ const styles = StyleSheet.create({
   },
   button: {
     alignItems: 'center',
-    borderRadius: 12,
+    borderRadius: 24,
     paddingVertical: 14,
     backgroundColor: '#fe2c55',
   },

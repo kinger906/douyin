@@ -18,6 +18,8 @@ import type {
   ModerationListResponse,
   UnlikeResponse,
   VideoRecord,
+  MeProfile,
+  MyVideosResponse,
 } from './types';
 
 export class ApiClientError extends Error {
@@ -120,6 +122,14 @@ export function createApiClient(options: CreateApiClientOptions) {
 
     getFeed(cursor?: string) {
       return request<FeedResponse>('/feed', { query: { cursor } });
+    },
+
+    getMe() {
+      return request<MeProfile>('/me');
+    },
+
+    getMyVideos(status?: string) {
+      return request<MyVideosResponse>('/me/videos', { query: { status } });
     },
 
     like(videoId: string) {

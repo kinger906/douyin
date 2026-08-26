@@ -1,410 +1,499 @@
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Image } from 'expo-image';
-import { useVideoPlayer, VideoView } from 'expo-video';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Dimensions,
   FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
-  useWindowDimensions,
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   type ViewToken,
 } from 'react-native';
-
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import type { CommentItem, FeedItem } from '@douyin/api-client';
 
 import { mobileApi } from '@/lib/api';
+import { formatCount } from '@/lib/format';
 
-const FALLBACK_COVER = 'https://placehold.co/720x1280/111111/ffffff?text=Douyin+Feed';
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return 'Unable to load data right now.';
-}
-
-type FeedCardProps = {
+function FeedVideo({
+  item,
+  active,
+  height,
+  onOpenComments,
+  onToggleLike,
+}: {
   item: FeedItem;
+  active: boolean;
   height: number;
-  isActive: boolean;
-  isNeighbor: boolean;
-  onToggleLike: (item: FeedItem) => void;
-};
-
-function FeedVideo({ uri, isActive }: { uri: string; isActive: boolean }) {
-  const player = useVideoPlayer(uri, (instance) => {
-    instance.loop = true;
-    instance.muted = false;
+  onOpenComments: () => void;
+  onToggleLike: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const player = useVideoPlayer(item.blobUrl, (p) => {
+    p.loop = true;
   });
 
   useEffect(() => {
-    if (isActive) {
+    if (active) {
       player.play();
     } else {
       player.pause();
     }
-  }, [isActive, player]);
+  }, [active, player]);
 
-  return <VideoView contentFit="cover" nativeControls={false} player={player} style={StyleSheet.absoluteFill} />;
-}
-
-function FeedCard({ item, height, isActive, isNeighbor, onToggleLike }: FeedCardProps) {
-  const queryClient = useQueryClient();
-  const [showComments, setShowComments] = useState(false);
-  const [draftComment, setDraftComment] = useState('');
-  const shouldMountVideo = isActive || isNeighbor;
-
-  const commentsQuery = useQuery({
-    queryKey: ['comments', item.id],
-    queryFn: () => mobileApi.listComments(item.id),
-    enabled: showComments,
-  });
-
-  const commentMutation = useMutation({
-    mutationFn: async () => {
-      if (!draftComment.trim()) {
-        throw new Error('Enter a comment before sending.');
-      }
-
-      return mobileApi.createComment(item.id, { body: draftComment.trim() });
-    },
-    onSuccess: async () => {
-      setDraftComment('');
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['feed'] }),
-        queryClient.invalidateQueries({ queryKey: ['comments', item.id] }),
-      ]);
-    },
-  });
-
-  const comments = commentsQuery.data?.items ?? [];
+  const authorName = item.author?.displayName || '用户';
+  const initial = authorName.slice(0, 1).toUpperCase();
 
   return (
-    <View style={[styles.slide, { height }]}>
-      <View style={styles.mediaSurface}>
-        {shouldMountVideo ? (
-          <FeedVideo isActive={isActive} uri={item.blobUrl} />
-        ) : (
-          <Image contentFit="cover" source={item.coverUrl ?? FALLBACK_COVER} style={StyleSheet.absoluteFill} />
-        )}
+    <View style={[styles.page, { height }]}>
+      <VideoView
+        player={player}
+        style={StyleSheet.absoluteFill}
+        contentFit="cover"
+        nativeControls={false}
+      />
+      <View style={styles.gradient} pointerEvents="none" />
+
+      <View style={[styles.rightRail, { bottom: 88 + insets.bottom }]}>
+        <Pressable style={styles.avatarWrap}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{initial}</Text>
+          </View>
+          <View style={styles.followPlus}>
+            <Text style={styles.followPlusText}>+</Text>
+          </View>
+        </Pressable>
+
+        <Pressable style={styles.action} onPress={onToggleLike}>
+          <Text style={[styles.actionIcon, item.likedByMe && styles.liked]}>♥</Text>
+          <Text style={styles.actionCount}>{formatCount(item.likeCount)}</Text>
+        </Pressable>
+
+        <Pressable style={styles.action} onPress={onOpenComments}>
+          <Text style={styles.actionIcon}>💬</Text>
+          <Text style={styles.actionCount}>{formatCount(item.commentCount)}</Text>
+        </Pressable>
+
+        <Pressable style={styles.action}>
+          <Text style={styles.actionIcon}>★</Text>
+          <Text style={styles.actionCount}>收藏</Text>
+        </Pressable>
+
+        <Pressable style={styles.action}>
+          <Text style={styles.actionIcon}>↗</Text>
+          <Text style={styles.actionCount}>分享</Text>
+        </Pressable>
       </View>
 
-      <View style={styles.overlay}>
-        <View style={styles.metaBlock}>
-          <Text style={styles.authorText}>@{item.author.displayName}</Text>
-          <Text style={styles.titleText}>{item.title}</Text>
-          {item.description ? <Text style={styles.bodyText}>{item.description}</Text> : null}
-          <Text style={styles.captionText}>
-            {item.likeCount} likes • {item.commentCount} comments
-          </Text>
-        </View>
-
-        <View style={styles.actions}>
-          <Pressable onPress={() => onToggleLike(item)} style={styles.actionButton}>
-            <Text style={styles.actionText}>{item.likedByMe ? 'Unlike' : 'Like'}</Text>
-          </Pressable>
-          <Pressable onPress={() => setShowComments((value) => !value)} style={styles.actionButton}>
-            <Text style={styles.actionText}>{showComments ? 'Hide comments' : 'Comments'}</Text>
-          </Pressable>
-        </View>
-
-        {showComments ? (
-          <View style={styles.commentSheet}>
-            <Text style={styles.commentTitle}>Comments</Text>
-            {commentsQuery.isLoading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <>
-                {comments.length === 0 ? (
-                  <Text style={styles.commentEmpty}>No comments yet.</Text>
-                ) : (
-                  comments.slice(0, 3).map((comment: CommentItem) => (
-                    <View key={comment.id} style={styles.commentItem}>
-                      <Text style={styles.commentAuthor}>{comment.author.displayName}</Text>
-                      <Text style={styles.commentBody}>{comment.body}</Text>
-                    </View>
-                  ))
-                )}
-              </>
-            )}
-
-            {commentsQuery.isError ? (
-              <Text style={styles.commentError}>{getErrorMessage(commentsQuery.error)}</Text>
-            ) : null}
-
-            <View style={styles.commentComposer}>
-              <TextInput
-                onChangeText={setDraftComment}
-                placeholder="Write a comment"
-                placeholderTextColor="#878787"
-                style={styles.commentInput}
-                value={draftComment}
-              />
-              <Pressable
-                disabled={commentMutation.isPending}
-                onPress={() => commentMutation.mutate()}
-                style={styles.commentButton}
-              >
-                <Text style={styles.commentButtonText}>
-                  {commentMutation.isPending ? 'Sending...' : 'Send'}
-                </Text>
-              </Pressable>
-            </View>
-
-            {commentMutation.isError ? (
-              <Text style={styles.commentError}>{getErrorMessage(commentMutation.error)}</Text>
-            ) : null}
-          </View>
-        ) : null}
+      <View style={[styles.meta, { bottom: 24 + insets.bottom }]}>
+        <Text style={styles.author}>@{authorName}</Text>
+        <Text style={styles.caption} numberOfLines={2}>
+          {item.description || item.title}
+        </Text>
       </View>
     </View>
   );
 }
 
 export default function FeedScreen() {
-  const { height } = useWindowDimensions();
-  const queryClient = useQueryClient();
-  const [activeIndex, setActiveIndex] = useState(0);
+  const insets = useSafeAreaInsets();
+  const [items, setItems] = useState<FeedItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [tab, setTab] = useState<'following' | 'recommend'>('recommend');
+  const [pageHeight, setPageHeight] = useState(SCREEN_HEIGHT);
 
-  const feedQuery = useInfiniteQuery({
-    queryKey: ['feed'],
-    initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) => mobileApi.getFeed(pageParam),
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-  });
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [commentsVideoId, setCommentsVideoId] = useState<string | null>(null);
+  const [comments, setComments] = useState<CommentItem[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentDraft, setCommentDraft] = useState('');
+  const [sending, setSending] = useState(false);
 
-  const likeMutation = useMutation({
-    mutationFn: async (item: FeedItem) => {
-      if (item.likedByMe) {
-        return mobileApi.unlike(item.id);
-      }
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await mobileApi.getFeed();
+      setItems(res.items);
+      setActiveId(res.items[0]?.id ?? null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载失败');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-      return mobileApi.like(item.id);
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['feed'] });
-    },
-  });
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-  const items = useMemo(
-    () => feedQuery.data?.pages.flatMap((page) => page.items) ?? [],
-    [feedQuery.data],
-  );
+  const openComments = useCallback(async (videoId: string) => {
+    setCommentsVideoId(videoId);
+    setCommentsOpen(true);
+    setCommentsLoading(true);
+    setCommentDraft('');
+    try {
+      const res = await mobileApi.listComments(videoId);
+      setComments(res.items);
+    } catch {
+      setComments([]);
+    } finally {
+      setCommentsLoading(false);
+    }
+  }, []);
 
-  const onViewableItemsChanged = useRef(
-    ({ viewableItems }: { viewableItems: Array<ViewToken<FeedItem>> }) => {
-      const nextIndex = viewableItems[0]?.index;
-      if (typeof nextIndex === 'number') {
-        setActiveIndex(nextIndex);
-      }
-    },
-  );
+  const toggleLike = useCallback(async (item: FeedItem) => {
+    const nextLiked = !item.likedByMe;
+    setItems((prev) =>
+      prev.map((row) =>
+        row.id === item.id
+          ? {
+              ...row,
+              likedByMe: nextLiked,
+              likeCount: Math.max(0, row.likeCount + (nextLiked ? 1 : -1)),
+            }
+          : row,
+      ),
+    );
+    try {
+      if (nextLiked) await mobileApi.like(item.id);
+      else await mobileApi.unlike(item.id);
+    } catch {
+      setItems((prev) =>
+        prev.map((row) =>
+          row.id === item.id
+            ? {
+                ...row,
+                likedByMe: item.likedByMe,
+                likeCount: item.likeCount,
+              }
+            : row,
+        ),
+      );
+    }
+  }, []);
 
-  const handleMomentumEnd = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const nextIndex = Math.round(event.nativeEvent.contentOffset.y / Math.max(height, 1));
-      setActiveIndex(nextIndex);
-    },
-    [height],
-  );
+  const sendComment = useCallback(async () => {
+    if (!commentsVideoId || !commentDraft.trim() || sending) return;
+    setSending(true);
+    try {
+      const created = await mobileApi.createComment(commentsVideoId, { body: commentDraft.trim() });
+      const sessionName = '我';
+      setComments((prev) => [
+        {
+          ...created,
+          author: {
+            id: created.userId,
+            displayName: sessionName,
+            avatarUrl: null,
+          },
+        },
+        ...prev,
+      ]);
+      setCommentDraft('');
+      setItems((prev) =>
+        prev.map((row) =>
+          row.id === commentsVideoId ? { ...row, commentCount: row.commentCount + 1 } : row,
+        ),
+      );
+    } catch {
+      // keep draft
+    } finally {
+      setSending(false);
+    }
+  }, [commentDraft, commentsVideoId, sending]);
 
-  if (feedQuery.isLoading) {
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    const first = viewableItems.find((v) => v.isViewable);
+    if (first?.item && typeof first.item === 'object' && 'id' in first.item) {
+      setActiveId((first.item as FeedItem).id);
+    }
+  }).current;
+
+  const viewabilityConfig = useMemo(() => ({ itemVisiblePercentThreshold: 80 }), []);
+
+  if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator color="#fe2c55" size="large" />
+      <View style={styles.center}>
+        <ActivityIndicator color="#fe2c55" />
       </View>
     );
   }
 
-  if (feedQuery.isError) {
+  if (error) {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.errorHeadline}>Feed unavailable</Text>
-        <Text style={styles.errorCopy}>{getErrorMessage(feedQuery.error)}</Text>
+      <View style={styles.center}>
+        <Text style={styles.error}>{error}</Text>
+        <Pressable onPress={() => void load()} style={styles.retry}>
+          <Text style={styles.retryText}>重试</Text>
+        </Pressable>
       </View>
     );
   }
 
-  if (items.length === 0) {
+  if (!items.length) {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.emptyHeadline}>No approved videos yet</Text>
-        <Text style={styles.emptyCopy}>Upload one from the next tab, then approve it in admin.</Text>
+      <View style={styles.center}>
+        <Text style={styles.empty}>暂无推荐视频</Text>
+        <Text style={styles.emptyHint}>去「+」发布，或在后台审核通过后再刷新</Text>
+        <Pressable onPress={() => void load()} style={styles.retry}>
+          <Text style={styles.retryText}>刷新</Text>
+        </Pressable>
       </View>
     );
   }
 
   return (
-    <FlatList
-      data={items}
-      decelerationRate="fast"
-      keyExtractor={(item) => item.id}
-      onEndReached={() => {
-        if (feedQuery.hasNextPage && !feedQuery.isFetchingNextPage) {
-          void feedQuery.fetchNextPage();
-        }
+    <View
+      style={styles.root}
+      onLayout={(e) => {
+        const h = e.nativeEvent.layout.height;
+        if (h > 0) setPageHeight(h);
       }}
-      onMomentumScrollEnd={handleMomentumEnd}
-      onViewableItemsChanged={onViewableItemsChanged.current}
-      pagingEnabled
-      renderItem={({ item, index }) => (
-        <FeedCard
-          height={height}
-          isActive={index === activeIndex}
-          isNeighbor={Math.abs(index - activeIndex) === 1}
-          item={item}
-          onToggleLike={(current) => likeMutation.mutate(current)}
+    >
+      <View style={[styles.topTabs, { paddingTop: insets.top + 4 }]} pointerEvents="box-none">
+        <Pressable onPress={() => setTab('following')}>
+          <Text style={[styles.topTab, tab === 'following' && styles.topTabActive]}>关注</Text>
+        </Pressable>
+        <Pressable onPress={() => setTab('recommend')}>
+          <Text style={[styles.topTab, tab === 'recommend' && styles.topTabActive]}>推荐</Text>
+          {tab === 'recommend' ? <View style={styles.topUnderline} /> : null}
+        </Pressable>
+      </View>
+
+      {tab === 'following' ? (
+        <View style={styles.center}>
+          <Text style={styles.empty}>关注流稍后开放</Text>
+          <Text style={styles.emptyHint}>先刷「推荐」看看吧</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={items}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <FeedVideo
+              item={item}
+              active={activeId === item.id && !commentsOpen}
+              height={pageHeight}
+              onOpenComments={() => void openComments(item.id)}
+              onToggleLike={() => void toggleLike(item)}
+            />
+          )}
+          pagingEnabled
+          showsVerticalScrollIndicator={false}
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={viewabilityConfig}
+          getItemLayout={(_, index) => ({
+            length: pageHeight,
+            offset: pageHeight * index,
+            index,
+          })}
+          onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
+            // keep for potential progress later
+            void e;
+          }}
         />
       )}
-      showsVerticalScrollIndicator={false}
-      snapToAlignment="start"
-      style={styles.list}
-      viewabilityConfig={{ itemVisiblePercentThreshold: 75 }}
-    />
+
+      <Modal visible={commentsOpen} animationType="slide" transparent onRequestClose={() => setCommentsOpen(false)}>
+        <Pressable style={styles.sheetBackdrop} onPress={() => setCommentsOpen(false)} />
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 12) }]}
+        >
+          <View style={styles.sheetHandle} />
+          <Text style={styles.sheetTitle}>
+            {formatCount(items.find((i) => i.id === commentsVideoId)?.commentCount ?? comments.length)} 条评论
+          </Text>
+          {commentsLoading ? (
+            <ActivityIndicator color="#fe2c55" style={{ marginTop: 24 }} />
+          ) : (
+            <FlatList
+              data={comments}
+              keyExtractor={(c) => c.id}
+              style={styles.commentList}
+              ListEmptyComponent={<Text style={styles.emptyHint}>抢首评吧</Text>}
+              renderItem={({ item }) => (
+                <View style={styles.commentRow}>
+                  <View style={styles.commentAvatar}>
+                    <Text style={styles.commentAvatarText}>
+                      {(item.author?.displayName || '用').slice(0, 1)}
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.commentAuthor}>{item.author?.displayName || '用户'}</Text>
+                    <Text style={styles.commentBody}>{item.body}</Text>
+                  </View>
+                </View>
+              )}
+            />
+          )}
+          <View style={styles.composer}>
+            <TextInput
+              style={styles.composerInput}
+              placeholder="善语结善缘，恶言伤人心"
+              placeholderTextColor="#999"
+              value={commentDraft}
+              onChangeText={setCommentDraft}
+            />
+            <Pressable onPress={() => void sendComment()} style={styles.sendBtn} disabled={sending}>
+              <Text style={styles.sendText}>{sending ? '...' : '发送'}</Text>
+            </Pressable>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  list: {
+  root: { flex: 1, backgroundColor: '#000' },
+  center: {
     flex: 1,
     backgroundColor: '#000',
-  },
-  centered: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
-    backgroundColor: '#000',
+    paddingHorizontal: 24,
   },
-  slide: {
-    flex: 1,
-    backgroundColor: '#000',
+  page: { width: '100%', backgroundColor: '#000' },
+  gradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'transparent',
   },
-  mediaSurface: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: '#111',
-  },
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    paddingHorizontal: 16,
-    paddingBottom: 28,
-    gap: 16,
-    backgroundColor: 'rgba(0,0,0,0.20)',
-  },
-  metaBlock: {
-    gap: 8,
-  },
-  authorText: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  titleText: {
-    color: '#fff',
-    fontSize: 22,
-    fontWeight: '700',
-  },
-  bodyText: {
-    color: '#f0f0f0',
-    fontSize: 15,
-    lineHeight: 20,
-  },
-  captionText: {
-    color: '#c8c8c8',
-    fontSize: 13,
-  },
-  actions: {
+  topTabs: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
     flexDirection: 'row',
-    gap: 12,
+    justifyContent: 'center',
+    gap: 28,
   },
-  actionButton: {
-    borderRadius: 999,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: 'rgba(0,0,0,0.48)',
+  topTab: { color: 'rgba(255,255,255,0.55)', fontSize: 17, fontWeight: '600', paddingBottom: 6 },
+  topTabActive: { color: '#fff' },
+  topUnderline: {
+    alignSelf: 'center',
+    width: 24,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: '#fff',
   },
-  actionText: {
-    color: '#fff',
-    fontWeight: '700',
+  rightRail: {
+    position: 'absolute',
+    right: 10,
+    alignItems: 'center',
+    gap: 18,
   },
-  commentSheet: {
-    gap: 10,
-    borderRadius: 20,
-    padding: 14,
-    backgroundColor: 'rgba(0,0,0,0.72)',
-  },
-  commentTitle: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  commentEmpty: {
-    color: '#cfcfcf',
-  },
-  commentItem: {
-    gap: 4,
-    paddingBottom: 6,
-  },
-  commentAuthor: {
-    color: '#fff',
-    fontWeight: '700',
-  },
-  commentBody: {
-    color: '#e6e6e6',
-  },
-  commentComposer: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  commentInput: {
-    flex: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: '#fff',
-    backgroundColor: '#121212',
-  },
-  commentButton: {
+  avatarWrap: { alignItems: 'center', marginBottom: 8 },
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#333',
+    borderWidth: 2,
+    borderColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
-    paddingHorizontal: 14,
+  },
+  avatarText: { color: '#fff', fontWeight: '700', fontSize: 18 },
+  followPlus: {
+    marginTop: -10,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: '#fe2c55',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  commentButtonText: {
-    color: '#fff',
-    fontWeight: '700',
+  followPlusText: { color: '#fff', fontWeight: '800', fontSize: 14, marginTop: -1 },
+  action: { alignItems: 'center', gap: 4 },
+  actionIcon: { fontSize: 32, color: '#fff', textShadowColor: 'rgba(0,0,0,0.45)', textShadowRadius: 4 },
+  liked: { color: '#fe2c55' },
+  actionCount: { color: '#fff', fontSize: 12, fontWeight: '600' },
+  meta: { position: 'absolute', left: 12, right: 88 },
+  author: { color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 6 },
+  caption: { color: '#fff', fontSize: 14, lineHeight: 20 },
+  error: { color: '#fe2c55', marginBottom: 12, textAlign: 'center' },
+  empty: { color: '#fff', fontSize: 16, fontWeight: '600', marginBottom: 8 },
+  emptyHint: { color: '#8a8a8a', textAlign: 'center', marginBottom: 16 },
+  retry: {
+    backgroundColor: '#fe2c55',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
   },
-  commentError: {
-    color: '#ff9c9c',
-    fontSize: 12,
+  retryText: { color: '#fff', fontWeight: '700' },
+  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' },
+  sheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: '55%',
+    minHeight: '45%',
+    paddingHorizontal: 16,
+    paddingTop: 8,
   },
-  errorHeadline: {
-    color: '#fff',
-    fontSize: 22,
-    fontWeight: '700',
+  sheetHandle: {
+    alignSelf: 'center',
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#ddd',
+    marginBottom: 10,
   },
-  errorCopy: {
-    color: '#b7b7b7',
-    marginTop: 8,
-    textAlign: 'center',
+  sheetTitle: { fontSize: 15, fontWeight: '700', color: '#161823', textAlign: 'center', marginBottom: 8 },
+  commentList: { flexGrow: 0, maxHeight: 280 },
+  commentRow: { flexDirection: 'row', gap: 10, paddingVertical: 10 },
+  commentAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#eee',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  emptyHeadline: {
-    color: '#fff',
-    fontSize: 22,
-    fontWeight: '700',
+  commentAvatarText: { fontWeight: '700', color: '#666' },
+  commentAuthor: { color: '#888', fontSize: 13, marginBottom: 2 },
+  commentBody: { color: '#161823', fontSize: 14, lineHeight: 20 },
+  composer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#eee',
+    paddingTop: 10,
+    marginTop: 4,
   },
-  emptyCopy: {
-    color: '#b7b7b7',
-    marginTop: 8,
-    textAlign: 'center',
+  composerInput: {
+    flex: 1,
+    backgroundColor: '#f2f2f2',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    fontSize: 14,
+    color: '#161823',
   },
+  sendBtn: {
+    backgroundColor: '#fe2c55',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  sendText: { color: '#fff', fontWeight: '700' },
 });

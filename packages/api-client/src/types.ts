@@ -133,6 +133,41 @@ export type AnalyticsSummary = {
   comments: number;
 };
 
+export type MeProfile = {
+  id: string;
+  email: string | null;
+  displayName: string;
+  avatarUrl: string | null;
+  role: string;
+  douyinId: string;
+  stats: {
+    likesReceived: number;
+    commentsReceived: number;
+    works: number;
+    approvedWorks: number;
+    following: number;
+    followers: number;
+    mutualFollows: number;
+  };
+};
+
+export type MyVideoItem = {
+  id: string;
+  title: string;
+  description: string;
+  blobUrl: string;
+  coverUrl: string | null;
+  durationMs: number;
+  status: string;
+  viewCount: number;
+  likeCount: number;
+  createdAt: string;
+};
+
+export type MyVideosResponse = {
+  items: MyVideoItem[];
+};
+
 export type CreateApiClientOptions = {
   baseUrl: string;
   getAccessToken?: () => string | null | Promise<string | null>;

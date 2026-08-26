@@ -151,7 +151,7 @@ onMounted(loadVideos);
       </template>
       <template #footer>
         <div class="flex justify-end gap-2">
-          <UButton color="neutral" variant="soft" @click="rejectOpen = false">取消</UButton>
+          <UButton color="neutral" variant="soft" @click="() => { rejectOpen = false }">取消</UButton>
           <UButton color="error" :loading="actionLoading" @click="confirmReject">确认拒绝</UButton>
         </div>
       </template>

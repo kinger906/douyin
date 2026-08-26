@@ -11,6 +11,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 
 import { mobileApi } from '@/lib/api';
 
@@ -20,11 +22,11 @@ function getErrorMessage(error: unknown) {
   if (error instanceof Error) {
     return error.message;
   }
-
-  return 'Unable to submit the upload.';
+  return '发布失败，请稍后重试';
 }
 
 export default function UploadScreen() {
+  const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -34,17 +36,16 @@ export default function UploadScreen() {
   const uploadMutation = useMutation({
     mutationFn: async () => {
       if (!asset) {
-        throw new Error('Pick a video first.');
+        throw new Error('请先选择视频');
       }
-
       if (!title.trim()) {
-        throw new Error('Enter a title.');
+        throw new Error('请填写标题');
       }
 
       const uploadTicket = await mobileApi.requestUpload();
       const nextNote = uploadTicket.mock
-        ? 'Mock blob mode detected. The video record was created with the placeholder URL.'
-        : 'Uploaded the selected video to Vercel Blob before creating the pending record.';
+        ? '当前为 Mock Blob 模式，已用占位地址创建审核记录'
+        : '视频已上传至 Blob，正在创建审核记录';
       const blobUrl = uploadTicket.mock
         ? PLACEHOLDER_VIDEO_URL
         : (await mobileApi.uploadVideo(uploadTicket, asset)).url;
@@ -64,14 +65,17 @@ export default function UploadScreen() {
       setDescription('');
       setAsset(null);
       await queryClient.invalidateQueries({ queryKey: ['feed'] });
-      Alert.alert('Upload queued', 'Your video is pending moderation before it appears in the feed.');
+      Alert.alert('已提交', '视频进入审核队列，通过后会出现在推荐页。', [
+        { text: '去首页', onPress: () => router.replace('/(tabs)/feed') },
+        { text: '继续发', style: 'cancel' },
+      ]);
     },
   });
 
   async function pickVideo() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Permission required', 'Allow media library access to choose a video.');
+      Alert.alert('需要权限', '请允许访问相册以选择视频');
       return;
     }
 
@@ -87,26 +91,29 @@ export default function UploadScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.content} style={styles.screen}>
-      <Text style={styles.title}>Upload</Text>
-      <Text style={styles.subtitle}>
-        Pick a short video, then create the pending record that admin can approve.
-      </Text>
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + 12, paddingBottom: 40 }]}
+    >
+      <Text style={styles.title}>发布</Text>
+      <Text style={styles.subtitle}>选择短视频并填写文案，提交后进入后台审核。</Text>
 
-      <Pressable onPress={() => void pickVideo()} style={styles.secondaryButton}>
-        <Text style={styles.secondaryButtonText}>{asset ? 'Pick another video' : 'Choose video'}</Text>
+      <Pressable onPress={() => void pickVideo()} style={styles.pickBtn}>
+        <Text style={styles.pickBtnText}>{asset ? '重新选择视频' : '选择视频'}</Text>
       </Pressable>
 
       <View style={styles.assetCard}>
-        <Text style={styles.assetLabel}>Selected file</Text>
-        <Text style={styles.assetValue}>{asset?.fileName ?? asset?.uri ?? 'Nothing selected yet'}</Text>
-        {asset?.duration ? <Text style={styles.assetMeta}>Duration: {Math.round(asset.duration / 1000)}s</Text> : null}
+        <Text style={styles.assetLabel}>已选文件</Text>
+        <Text style={styles.assetValue}>{asset?.fileName ?? asset?.uri ?? '尚未选择'}</Text>
+        {asset?.duration ? (
+          <Text style={styles.assetMeta}>时长 {Math.round(asset.duration / 1000)} 秒</Text>
+        ) : null}
       </View>
 
       <TextInput
         onChangeText={setTitle}
-        placeholder="Title"
-        placeholderTextColor="#787878"
+        placeholder="标题"
+        placeholderTextColor="#999"
         style={styles.input}
         value={title}
       />
@@ -114,8 +121,8 @@ export default function UploadScreen() {
         multiline
         numberOfLines={4}
         onChangeText={setDescription}
-        placeholder="Description"
-        placeholderTextColor="#787878"
+        placeholder="添加作品描述…"
+        placeholderTextColor="#999"
         style={[styles.input, styles.textarea]}
         value={description}
       />
@@ -128,99 +135,58 @@ export default function UploadScreen() {
         {uploadMutation.isPending ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.primaryButtonText}>Create pending upload</Text>
+          <Text style={styles.primaryButtonText}>发布</Text>
         )}
       </Pressable>
 
       {uploadMutation.isError ? (
         <Text style={styles.errorText}>{getErrorMessage(uploadMutation.error)}</Text>
       ) : null}
-
       {uploadNote ? <Text style={styles.noteText}>{uploadNote}</Text> : null}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: '#000',
+  screen: { flex: 1, backgroundColor: '#fff' },
+  content: { gap: 14, paddingHorizontal: 20 },
+  title: { color: '#161823', fontSize: 24, fontWeight: '700' },
+  subtitle: { color: '#8a8a8a', lineHeight: 20, marginBottom: 4 },
+  pickBtn: {
+    alignItems: 'center',
+    borderRadius: 8,
+    paddingVertical: 14,
+    backgroundColor: '#161823',
   },
-  content: {
-    gap: 16,
-    padding: 20,
-  },
-  title: {
-    color: '#fff',
-    fontSize: 28,
-    fontWeight: '700',
-  },
-  subtitle: {
-    color: '#b5b5b5',
-    lineHeight: 20,
-  },
+  pickBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   assetCard: {
     gap: 6,
-    borderRadius: 16,
-    padding: 16,
-    backgroundColor: '#151515',
+    borderRadius: 12,
+    padding: 14,
+    backgroundColor: '#f5f5f5',
   },
-  assetLabel: {
-    color: '#fe2c55',
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  assetValue: {
-    color: '#fff',
-    fontSize: 15,
-  },
-  assetMeta: {
-    color: '#9f9f9f',
-    fontSize: 13,
-  },
+  assetLabel: { color: '#8a8a8a', fontSize: 12, fontWeight: '600' },
+  assetValue: { color: '#161823', fontSize: 14 },
+  assetMeta: { color: '#8a8a8a', fontSize: 13 },
   input: {
     borderWidth: 1,
-    borderColor: '#2d2d2d',
-    borderRadius: 14,
+    borderColor: '#e5e5e5',
+    borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    color: '#fff',
-    backgroundColor: '#0f0f0f',
+    color: '#161823',
+    backgroundColor: '#fafafa',
   },
-  textarea: {
-    minHeight: 110,
-    textAlignVertical: 'top',
-  },
+  textarea: { minHeight: 110, textAlignVertical: 'top' },
   primaryButton: {
     alignItems: 'center',
-    borderRadius: 14,
+    borderRadius: 24,
     paddingVertical: 14,
     backgroundColor: '#fe2c55',
+    marginTop: 4,
   },
-  secondaryButton: {
-    alignItems: 'center',
-    borderRadius: 14,
-    paddingVertical: 14,
-    backgroundColor: '#232323',
-  },
-  primaryButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  secondaryButtonText: {
-    color: '#fff',
-    fontWeight: '700',
-  },
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-  errorText: {
-    color: '#ff8f8f',
-  },
-  noteText: {
-    color: '#b5b5b5',
-    lineHeight: 20,
-  },
+  primaryButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  buttonDisabled: { opacity: 0.7 },
+  errorText: { color: '#fe2c55' },
+  noteText: { color: '#8a8a8a', lineHeight: 20 },
 });

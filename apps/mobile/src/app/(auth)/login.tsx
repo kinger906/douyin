@@ -18,8 +18,7 @@ function getErrorMessage(error: unknown) {
   if (error instanceof Error) {
     return error.message;
   }
-
-  return 'Something went wrong. Please try again.';
+  return '登录失败，请稍后重试';
 }
 
 export default function LoginScreen() {
@@ -39,23 +38,22 @@ export default function LoginScreen() {
       style={styles.screen}
     >
       <View style={styles.card}>
-        <Text style={styles.eyebrow}>Douyin MVP</Text>
-        <Text style={styles.title}>Login</Text>
-        <Text style={styles.subtitle}>Use the seeded admin or a registered user.</Text>
+        <Text style={styles.logo}>抖音</Text>
+        <Text style={styles.subtitle}>登录后刷推荐、发视频、看个人主页</Text>
         <Text style={styles.debugText}>API: {mobileApi.apiBaseUrl}</Text>
 
         <TextInput
           autoCapitalize="none"
           keyboardType="email-address"
           onChangeText={setEmail}
-          placeholder="Email"
+          placeholder="邮箱"
           placeholderTextColor="#7a7a7a"
           style={styles.input}
           value={email}
         />
         <TextInput
           onChangeText={setPassword}
-          placeholder="Password"
+          placeholder="密码"
           placeholderTextColor="#7a7a7a"
           secureTextEntry
           style={styles.input}
@@ -74,12 +72,12 @@ export default function LoginScreen() {
           {loginMutation.isPending ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.buttonText}>Login</Text>
+            <Text style={styles.buttonText}>登录</Text>
           )}
         </Pressable>
 
         <Link href="/(auth)/register" style={styles.link}>
-          Need an account? Register
+          没有账号？去注册
         </Link>
       </View>
     </KeyboardAvoidingView>
@@ -99,16 +97,11 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: '#161616',
   },
-  eyebrow: {
+  logo: {
     color: '#fe2c55',
-    fontSize: 13,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  title: {
-    color: '#fff',
-    fontSize: 32,
-    fontWeight: '700',
+    fontSize: 36,
+    fontWeight: '800',
+    letterSpacing: 4,
   },
   subtitle: {
     color: '#b7b7b7',
@@ -130,7 +123,7 @@ const styles = StyleSheet.create({
   },
   button: {
     alignItems: 'center',
-    borderRadius: 12,
+    borderRadius: 24,
     paddingVertical: 14,
     backgroundColor: '#fe2c55',
   },

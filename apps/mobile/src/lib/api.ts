@@ -199,6 +199,12 @@ export const mobileApi = {
   getFeed(cursor?: string): Promise<FeedResponse> {
     return withAuthRetry(() => authedClient.getFeed(cursor));
   },
+  getMe() {
+    return withAuthRetry(() => authedClient.getMe());
+  },
+  getMyVideos(status?: string) {
+    return withAuthRetry(() => authedClient.getMyVideos(status));
+  },
   requestUpload(): Promise<UploadTicket> {
     return withAuthRetry(() => requestUploadTicket());
   },

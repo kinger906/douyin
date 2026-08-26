@@ -7,12 +7,6 @@ export default defineNuxtConfig({
     preference: 'light',
     fallback: 'light',
   },
-  ui: {
-    colors: {
-      primary: 'blue',
-      neutral: 'slate',
-    },
-  },
   // Avoid Google Fonts timeouts in mainland China
   fonts: {
     defaults: {
