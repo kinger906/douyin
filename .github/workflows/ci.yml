@@ -5,6 +5,10 @@ on:
     branches: [main, master]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   quality:
     runs-on: ubuntu-latest
@@ -39,3 +43,125 @@ jobs:
 
       - name: Build admin
         run: pnpm --filter @douyin/admin build
+
+  deploy-admin:
+    name: Deploy admin to Vercel
+    needs: quality
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: production
+
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
+      JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
+      JWT_ACCESS_TTL: ${{ secrets.JWT_ACCESS_TTL }}
+      JWT_REFRESH_TTL: ${{ secrets.JWT_REFRESH_TTL }}
+      BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+      NUXT_PUBLIC_API_BASE: ${{ secrets.NUXT_PUBLIC_API_BASE }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@41
+
+      - name: Validate required secrets
+        run: |
+          missing=0
+          for key in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID DATABASE_URL JWT_ACCESS_SECRET JWT_REFRESH_SECRET NUXT_PUBLIC_API_BASE; do
+            if [ -z "${!key}" ]; then
+              echo "::error::Missing required GitHub secret: $key"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+          # Optional secrets get safe defaults for deploy
+          echo "JWT_ACCESS_TTL=${JWT_ACCESS_TTL:-15m}" >> "$GITHUB_ENV"
+          echo "JWT_REFRESH_TTL=${JWT_REFRESH_TTL:-30d}" >> "$GITHUB_ENV"
+
+      - name: Pull Vercel project settings
+        working-directory: apps/admin
+        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Sync GitHub Secrets → Vercel Production env
+        working-directory: apps/admin
+        run: |
+          upsert_env() {
+            local key="$1"
+            local value="$2"
+            if [ -z "$value" ]; then
+              echo "Skip empty $key"
+              return 0
+            fi
+            vercel env rm "$key" production --yes --token="$VERCEL_TOKEN" >/dev/null 2>&1 || true
+            printf '%s' "$value" | vercel env add "$key" production --token="$VERCEL_TOKEN"
+            echo "Synced $key"
+          }
+
+          upsert_env DATABASE_URL "$DATABASE_URL"
+          upsert_env JWT_ACCESS_SECRET "$JWT_ACCESS_SECRET"
+          upsert_env JWT_REFRESH_SECRET "$JWT_REFRESH_SECRET"
+          upsert_env JWT_ACCESS_TTL "${JWT_ACCESS_TTL:-15m}"
+          upsert_env JWT_REFRESH_TTL "${JWT_REFRESH_TTL:-30d}"
+          upsert_env BLOB_READ_WRITE_TOKEN "$BLOB_READ_WRITE_TOKEN"
+          upsert_env NUXT_PUBLIC_API_BASE "$NUXT_PUBLIC_API_BASE"
+
+      - name: Write build env from GitHub Secrets
+        working-directory: apps/admin
+        run: |
+          mkdir -p .vercel
+          # Source of truth for this build (also used if Vercel pull env is stale)
+          {
+            printf 'DATABASE_URL=%s\n' "$DATABASE_URL"
+            printf 'JWT_ACCESS_SECRET=%s\n' "$JWT_ACCESS_SECRET"
+            printf 'JWT_REFRESH_SECRET=%s\n' "$JWT_REFRESH_SECRET"
+            printf 'JWT_ACCESS_TTL=%s\n' "${JWT_ACCESS_TTL:-15m}"
+            printf 'JWT_REFRESH_TTL=%s\n' "${JWT_REFRESH_TTL:-30d}"
+            printf 'BLOB_READ_WRITE_TOKEN=%s\n' "$BLOB_READ_WRITE_TOKEN"
+            printf 'NUXT_PUBLIC_API_BASE=%s\n' "$NUXT_PUBLIC_API_BASE"
+          } > .vercel/.env.production.local
+
+      - name: Build for Vercel
+        working-directory: apps/admin
+        run: vercel build --prod --token="$VERCEL_TOKEN"
+
+      - name: Deploy prebuilt to production
+        working-directory: apps/admin
+        id: deploy
+        run: |
+          url="$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed: $url"
+
+      - name: Summary
+        run: |
+          {
+            echo "## Admin deployed"
+            echo ""
+            echo "- URL: ${{ steps.deploy.outputs.url }}"
+            echo "- Branch: \`${{ github.ref_name }}\`"
+            echo "- Commit: \`${{ github.sha }}\`"
+            echo "- Env source: GitHub Secrets (synced to Vercel Production)"
+          } >> "$GITHUB_STEP_SUMMARY"

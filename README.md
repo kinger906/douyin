@@ -103,6 +103,8 @@ pnpm db:migrate
 pnpm db:seed
 ```
 
+Production admin/API deploy is described in [`docs/deployment.md`](docs/deployment.md) (GitHub Actions → Vercel).
+
 ## Vertical Slice Demo
 
 The happy path is:

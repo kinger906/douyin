@@ -8,4 +8,5 @@ dist
 .env.local
 *.log
 .expo
+.vercel
 coverage
