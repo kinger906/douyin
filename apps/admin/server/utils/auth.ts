@@ -25,7 +25,7 @@ export type AuthSessionUser = AuthUser & {
 export type AuthSuccessResponse = {
   user: Pick<AuthSessionUser, 'id' | 'email' | 'displayName' | 'role'>;
   accessToken: string;
-  refreshToken: string;
+  refreshToken: string | null;
   expiresIn: number;
 };
 
@@ -82,36 +82,6 @@ async function tryAccessToken(token: string): Promise<AuthUser | null> {
   }
 }
 
-async function findUserByRefreshToken(token: string): Promise<AuthUser | null> {
-  const tokenHash = await hashRefreshToken(token);
-  const records = await useDb()
-    .select({
-      id: users.id,
-      role: users.role,
-      status: users.status,
-    })
-    .from(refreshTokens)
-    .innerJoin(users, eq(refreshTokens.userId, users.id))
-    .where(
-      and(
-        eq(refreshTokens.tokenHash, tokenHash),
-        isNull(refreshTokens.revokedAt),
-        gt(refreshTokens.expiresAt, new Date()),
-      ),
-    )
-    .limit(1);
-
-  const user = records[0];
-  if (!user || user.status !== USER_STATUS.ACTIVE) {
-    return null;
-  }
-
-  return {
-    id: user.id,
-    role: user.role,
-  };
-}
-
 export function readRefreshToken(event: H3Event) {
   return getCookie(event, 'refresh_token') ?? null;
 }
@@ -145,6 +115,7 @@ export async function issueAuthTokens(
 ): Promise<AuthSuccessResponse> {
   const accessToken = await signAccessToken({ sub: user.id, role: user.role });
   const refresh = await signRefreshToken();
+  const isAdmin = user.role === USER_ROLE.ADMIN;
 
   await useDb().insert(refreshTokens).values({
     userId: user.id,
@@ -152,7 +123,7 @@ export async function issueAuthTokens(
     expiresAt: refresh.expiresAt,
   });
 
-  if (user.role === USER_ROLE.ADMIN) {
+  if (isAdmin) {
     setAdminAuthCookies(event, {
       accessToken,
       refreshToken: refresh.token,
@@ -168,7 +139,7 @@ export async function issueAuthTokens(
       role: user.role,
     },
     accessToken,
-    refreshToken: refresh.token,
+    refreshToken: isAdmin ? null : refresh.token,
     expiresIn: Math.floor(getAccessTokenExpiresIn() / 1000),
   };
 }
@@ -239,14 +210,6 @@ export async function requireUser(event: H3Event): Promise<AuthUser> {
   const accessTokenCookie = getCookie(event, 'access_token');
   if (accessTokenCookie) {
     const user = await tryAccessToken(accessTokenCookie);
-    if (user) {
-      return user;
-    }
-  }
-
-  const refreshTokenCookie = readRefreshToken(event);
-  if (refreshTokenCookie) {
-    const user = await findUserByRefreshToken(refreshTokenCookie);
     if (user) {
       return user;
     }

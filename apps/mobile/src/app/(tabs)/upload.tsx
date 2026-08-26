@@ -42,10 +42,12 @@ export default function UploadScreen() {
       }
 
       const uploadTicket = await mobileApi.requestUpload();
-      const blobUrl = PLACEHOLDER_VIDEO_URL;
       const nextNote = uploadTicket.mock
         ? 'Mock blob mode detected. The video record was created with the placeholder URL.'
-        : 'Blob token exists, but this MVP confirms the video with a placeholder URL in native mode.';
+        : 'Uploaded the selected video to Vercel Blob before creating the pending record.';
+      const blobUrl = uploadTicket.mock
+        ? PLACEHOLDER_VIDEO_URL
+        : (await mobileApi.uploadVideo(uploadTicket, asset)).url;
 
       setUploadNote(nextNote);
 

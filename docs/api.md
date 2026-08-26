@@ -12,6 +12,7 @@ All public HTTP routes live under:
 
 - Mobile clients send `Authorization: Bearer <accessToken>`.
 - Admin login also sets `access_token` and `refresh_token` cookies for browser flows.
+- Admin JSON auth responses do not expose the refresh token; browser refresh uses the `refresh_token` cookie on `/auth/refresh`.
 - Refresh tokens are stored hashed in the database.
 - Error responses use the shape `{ "error": { "code": "...", "message": "..." } }`.
 
@@ -28,6 +29,7 @@ All public HTTP routes live under:
 ### Authenticated User
 
 - `POST /uploads/blob`: request a Blob client token or a local mock upload ticket
+- `POST /uploads/blob/proxy`: upload a picked mobile video to Vercel Blob when native client uploads cannot use the browser token flow
 - `POST /videos`: create a video record in `pending`
 - `GET /videos/:id`: fetch a single video; non-approved videos are only visible to the author or an admin
 - `GET /feed`: list approved videos with cursor pagination

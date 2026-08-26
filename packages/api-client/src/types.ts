@@ -17,7 +17,7 @@ export type AuthUser = {
 export type AuthSuccessResponse = {
   user: AuthUser;
   accessToken: string;
-  refreshToken: string;
+  refreshToken: string | null;
   expiresIn: number;
 };
 

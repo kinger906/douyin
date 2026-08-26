@@ -21,6 +21,13 @@ export type UploadTicket = {
   note?: string;
 };
 
+type UploadBlobResponse = {
+  url: string;
+  pathname: string;
+  contentType: string;
+  downloadUrl: string;
+};
+
 const apiBaseUrl = (process.env.EXPO_PUBLIC_API_BASE ?? 'http://localhost:3000').replace(/\/$/, '');
 
 const authedClient = createApiClient({
@@ -113,6 +120,41 @@ async function requestUploadTicket(): Promise<UploadTicket> {
   return (await response.json()) as UploadTicket;
 }
 
+async function uploadVideoBlob(
+  ticket: UploadTicket,
+  asset: { uri: string; fileName?: string | null; mimeType?: string | null },
+): Promise<UploadBlobResponse> {
+  const accessToken = useSessionStore.getState().accessToken;
+  const formData = new FormData();
+
+  formData.append('pathname', ticket.pathname);
+  formData.append(
+    'file',
+    {
+      uri: asset.uri,
+      name: asset.fileName ?? `${ticket.pathname.split('/').pop() ?? 'upload.mp4'}`,
+      type: asset.mimeType ?? 'video/mp4',
+    } as any,
+  );
+
+  const response = await fetch(`${apiBaseUrl}/api/v1/uploads/blob/proxy`, {
+    method: 'POST',
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const payload = parseErrorPayload(await response.json().catch(() => null));
+    throw new ApiClientError(
+      payload?.code ?? 'INTERNAL',
+      payload?.message ?? response.statusText,
+      response.status,
+    );
+  }
+
+  return (await response.json()) as UploadBlobResponse;
+}
+
 export const mobileApi = {
   apiBaseUrl,
   async register(body: RegisterBody): Promise<AuthSuccessResponse> {
@@ -145,6 +187,9 @@ export const mobileApi = {
   },
   requestUpload(): Promise<UploadTicket> {
     return withAuthRetry(() => requestUploadTicket());
+  },
+  uploadVideo(ticket: UploadTicket, asset: { uri: string; fileName?: string | null; mimeType?: string | null }) {
+    return withAuthRetry(() => uploadVideoBlob(ticket, asset));
   },
   createVideo(body: CreateVideoBody): Promise<VideoRecord> {
     return withAuthRetry(() => authedClient.createVideo(body));

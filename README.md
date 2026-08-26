@@ -89,6 +89,7 @@ Notes:
 
 - `DATABASE_URL` is required for local migrations, seed, and any API path that touches the database.
 - `BLOB_READ_WRITE_TOKEN` is optional in local development. Without it, `POST /api/v1/uploads/blob` returns a mock upload ticket so you can still demo the vertical slice with a placeholder HTTPS video URL.
+- When `BLOB_READ_WRITE_TOKEN` is configured, the mobile app uploads the picked video through `POST /api/v1/uploads/blob/proxy` before creating the pending video record.
 
 ## Useful Commands
 
@@ -151,6 +152,8 @@ curl.exe -X POST http://localhost:3000/api/v1/auth/login `
   -H "content-type: application/json" `
   -d "{\"email\":\"admin@example.com\",\"password\":\"Admin123!\"}"
 ```
+
+The admin login response returns the access token in JSON and stores the refresh token only in the `refresh_token` cookie for browser refresh flows.
 
 Approve the pending video using the admin access token and the video id from the previous response:
 
