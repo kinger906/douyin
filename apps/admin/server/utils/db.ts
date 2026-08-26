@@ -1,4 +1,5 @@
 import { createDb, type Db } from '@douyin/db';
+import { useAppRuntimeConfig } from './runtime-config';
 
 let db: Db | null = null;
 
@@ -7,7 +8,7 @@ export function useDb(): Db {
     return db;
   }
 
-  const { databaseUrl } = useRuntimeConfig();
+  const { databaseUrl } = useAppRuntimeConfig();
   if (!databaseUrl) {
     throw new Error('DATABASE_URL is not configured');
   }
