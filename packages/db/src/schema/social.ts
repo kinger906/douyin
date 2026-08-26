@@ -1,4 +1,4 @@
-import { pgEnum, pgTable, text, timestamp, uuid, unique } from 'drizzle-orm/pg-core';
+import { pgEnum, pgTable, text, timestamp, uuid, unique, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import { users } from './users';
 import { videos } from './videos';
 
@@ -27,7 +27,9 @@ export const comments = pgTable('comments', {
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
   body: text('body').notNull(),
-  parentId: uuid('parent_id'),
+  parentId: uuid('parent_id').references((): AnyPgColumn => comments.id, {
+    onDelete: 'cascade',
+  }),
   status: commentStatusEnum('status').notNull().default('visible'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
