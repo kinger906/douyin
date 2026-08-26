@@ -11,6 +11,7 @@ type AnalyticsSummary = {
 const { request } = useAdminApi();
 
 const summary = ref<AnalyticsSummary | null>(null);
+const isLoading = ref(false);
 const errorMessage = ref('');
 
 const cards = computed(() => {
@@ -28,36 +29,54 @@ const cards = computed(() => {
   ];
 });
 
-onMounted(async () => {
+async function loadSummary() {
+  isLoading.value = true;
+  errorMessage.value = '';
+
   try {
     summary.value = await request<AnalyticsSummary>('/api/v1/admin/analytics/summary');
   } catch (error) {
     errorMessage.value =
       (error as { data?: { error?: { message?: string } } }).data?.error?.message ??
-      'Failed to load analytics summary';
+      'Failed to load analytics';
+  } finally {
+    isLoading.value = false;
   }
-});
+}
+
+onMounted(loadSummary);
 </script>
 
 <template>
   <section>
-    <h1 style="margin-top: 0">Admin Home</h1>
-    <p style="color: #4b5563">
-      Use the links above to moderate videos, manage users, inspect summary metrics, and edit
-      feature flags.
-    </p>
+    <div
+      style="display: flex; justify-content: space-between; gap: 16px; align-items: center; flex-wrap: wrap"
+    >
+      <div>
+        <h1 style="margin: 0 0 8px">Analytics</h1>
+        <p style="margin: 0; color: #4b5563">Current platform totals from the database.</p>
+      </div>
+      <button
+        type="button"
+        style="padding: 10px 14px; border: 1px solid #d1d5db; border-radius: 8px; background: white"
+        @click="loadSummary"
+      >
+        Refresh
+      </button>
+    </div>
 
-    <p v-if="errorMessage" style="color: #b91c1c">
+    <p v-if="errorMessage" style="margin-top: 16px; color: #b91c1c">
       {{ errorMessage }}
     </p>
+    <p v-else-if="isLoading" style="margin-top: 16px">Loading analytics...</p>
 
     <div
-      v-if="summary"
+      v-else-if="summary"
       style="
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
         gap: 16px;
-        margin-top: 24px;
+        margin-top: 20px;
       "
     >
       <article
