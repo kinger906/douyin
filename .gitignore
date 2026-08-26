@@ -1,0 +1,11 @@
+﻿.superpowers/
+node_modules
+.turbo
+.nuxt
+.output
+dist
+.env
+.env.local
+*.log
+.expo
+coverage
