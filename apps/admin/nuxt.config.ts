@@ -29,6 +29,10 @@ export default defineNuxtConfig({
       htmlAttrs: { lang: 'zh-CN' },
     },
   },
+  // Vercel CLI / platform sets VERCEL=1; force Nitro Build Output API instead of .output
+  nitro: {
+    preset: process.env.VERCEL || process.env.NITRO_PRESET === 'vercel' ? 'vercel' : undefined,
+  },
   runtimeConfig: {
     databaseUrl: process.env.DATABASE_URL || '',
     jwtAccessSecret: process.env.JWT_ACCESS_SECRET || '',

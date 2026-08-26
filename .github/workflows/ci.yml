@@ -39,7 +39,9 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Build admin
+      # PR only: smoke build (node-server). Production push builds once in deploy-admin.
+      - name: Build admin (PR smoke)
+        if: github.event_name == 'pull_request'
         run: pnpm --filter @douyin/admin build
 
   deploy-admin:
@@ -61,6 +63,7 @@ jobs:
       JWT_REFRESH_TTL: ${{ secrets.JWT_REFRESH_TTL }}
       BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
       NUXT_PUBLIC_API_BASE: ${{ secrets.NUXT_PUBLIC_API_BASE }}
+      NITRO_PRESET: vercel
 
     steps:
       - name: Checkout
@@ -93,13 +96,27 @@ jobs:
           if [ "$missing" -ne 0 ]; then
             exit 1
           fi
-          # Optional secrets get safe defaults for deploy
           echo "JWT_ACCESS_TTL=${JWT_ACCESS_TTL:-15m}" >> "$GITHUB_ENV"
           echo "JWT_REFRESH_TTL=${JWT_REFRESH_TTL:-30d}" >> "$GITHUB_ENV"
 
       - name: Pull Vercel project settings
         working-directory: apps/admin
         run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Fix Vercel project settings for Nuxt
+        working-directory: apps/admin
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = '.vercel/project.json';
+          const project = JSON.parse(fs.readFileSync(path, 'utf8'));
+          project.settings = project.settings || {};
+          project.settings.framework = 'nuxtjs';
+          delete project.settings.outputDirectory;
+          fs.writeFileSync(path, JSON.stringify(project, null, 2));
+          console.log('framework=', project.settings.framework);
+          console.log('outputDirectory cleared for Build Output API');
+          NODE
 
       - name: Sync GitHub Secrets → Vercel Production env
         working-directory: apps/admin
@@ -128,7 +145,6 @@ jobs:
         working-directory: apps/admin
         run: |
           mkdir -p .vercel
-          # Source of truth for this build (also used if Vercel pull env is stale)
           {
             printf 'DATABASE_URL=%s\n' "$DATABASE_URL"
             printf 'JWT_ACCESS_SECRET=%s\n' "$JWT_ACCESS_SECRET"
@@ -137,13 +153,26 @@ jobs:
             printf 'JWT_REFRESH_TTL=%s\n' "${JWT_REFRESH_TTL:-30d}"
             printf 'BLOB_READ_WRITE_TOKEN=%s\n' "$BLOB_READ_WRITE_TOKEN"
             printf 'NUXT_PUBLIC_API_BASE=%s\n' "$NUXT_PUBLIC_API_BASE"
+            printf 'NITRO_PRESET=vercel\n'
           } > .vercel/.env.production.local
 
-      - name: Build for Vercel
+      # Single production build in GHA, then upload prebuilt output to Vercel (no second remote build).
+      - name: Build once for Vercel
         working-directory: apps/admin
         run: vercel build --prod --token="$VERCEL_TOKEN"
 
-      - name: Deploy prebuilt to production
+      - name: Verify Build Output API
+        working-directory: apps/admin
+        run: |
+          if [ ! -d .vercel/output ]; then
+            echo "::error::Expected .vercel/output after vercel build (Nitro vercel preset)."
+            ls -la .vercel || true
+            ls -la .output || true
+            exit 1
+          fi
+          ls -la .vercel/output
+
+      - name: Push prebuilt to Vercel Production
         working-directory: apps/admin
         id: deploy
         run: |
@@ -159,5 +188,5 @@ jobs:
             echo "- URL: ${{ steps.deploy.outputs.url }}"
             echo "- Branch: \`${{ github.ref_name }}\`"
             echo "- Commit: \`${{ github.sha }}\`"
-            echo "- Env source: GitHub Secrets (synced to Vercel Production)"
+            echo "- Build: once in GitHub Actions → \`vercel deploy --prebuilt\`"
           } >> "$GITHUB_STEP_SUMMARY"
