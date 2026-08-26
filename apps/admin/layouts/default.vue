@@ -3,6 +3,7 @@ const { logout, user } = useAdminSession();
 
 const links = [
   { to: '/', label: 'Home' },
+  { to: '/upload', label: 'Upload' },
   { to: '/moderation', label: 'Moderation' },
   { to: '/users', label: 'Users' },
   { to: '/analytics', label: 'Analytics' },

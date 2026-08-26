@@ -43,8 +43,9 @@ onMounted(async () => {
   <section>
     <h1 style="margin-top: 0">Admin Home</h1>
     <p style="color: #4b5563">
-      Use the links above to moderate videos, manage users, inspect summary metrics, and edit
-      feature flags.
+      Use <NuxtLink to="/upload">Upload</NuxtLink> to add videos, then
+      <NuxtLink to="/moderation">Moderation</NuxtLink> to approve them for the feed. Also manage
+      users, analytics, and feature flags.
     </p>
 
     <p v-if="errorMessage" style="color: #b91c1c">
