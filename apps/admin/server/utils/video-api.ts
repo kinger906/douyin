@@ -30,7 +30,20 @@ export async function getOptionalUser(event: H3Event): Promise<AuthUser | null> 
     return null;
   }
 
-  return requireUser(event);
+  try {
+    return await requireUser(event);
+  } catch (err) {
+    if (
+      err instanceof AppError &&
+      (err.code === ErrorCode.AUTH_INVALID ||
+        err.code === ErrorCode.AUTH_UNAUTHORIZED ||
+        err.code === ErrorCode.AUTH_FORBIDDEN)
+    ) {
+      return null;
+    }
+
+    throw err;
+  }
 }
 
 export async function requireApprovedVideo(videoId: string) {
