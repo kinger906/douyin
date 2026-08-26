@@ -58,8 +58,8 @@ Recommended production values:
 
 The GitHub Actions workflow (`.github/workflows/ci.yml`) has two jobs:
 
-1. **quality** (every push/PR): lint, test, typecheck, and `pnpm --filter @douyin/admin build`
-2. **deploy-admin** (push to `main` / `master` only, after quality passes): read app config from GitHub Secrets, sync them to Vercel Production, then `vercel build` + `deploy --prebuilt --prod`
+1. **quality** (every push/PR): lint, test, typecheck. On **pull_request** only, also smoke-builds admin (no Vercel deploy).
+2. **deploy-admin** (push to `main` / `master` only, after quality): sync GitHub Secrets → Vercel, **build once** with Nitro `vercel` preset (`vercel build`), then **push** the prebuilt output (`vercel deploy --prebuilt --prod`). Vercel does not rebuild.
 
 It does not:
 
