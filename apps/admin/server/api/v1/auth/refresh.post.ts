@@ -1,3 +1,4 @@
+import { AppError, ErrorCode } from '@douyin/shared';
 import { defineEventHandler, readBody } from 'h3';
 import {
   assertRefreshSession,
@@ -24,7 +25,10 @@ export default defineEventHandler(async (event) => {
     const session = await findRefreshSession(token ?? '');
 
     assertRefreshSession(session);
-    await revokeRefreshToken(session.tokenHash);
+    const revoked = await revokeRefreshToken(session.tokenHash);
+    if (!revoked) {
+      throw new AppError(ErrorCode.AUTH_INVALID, 'Refresh token is invalid or already used', 401);
+    }
 
     return issueAuthTokens(event, {
       id: session.id,

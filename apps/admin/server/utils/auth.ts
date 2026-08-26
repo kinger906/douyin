@@ -209,11 +209,20 @@ export function assertRefreshSession(session: RefreshSession | null): asserts se
   }
 }
 
-export async function revokeRefreshToken(tokenHash: string) {
-  await useDb()
+export async function revokeRefreshToken(tokenHash: string): Promise<boolean> {
+  const revokedTokens = await useDb()
     .update(refreshTokens)
     .set({ revokedAt: new Date() })
-    .where(and(eq(refreshTokens.tokenHash, tokenHash), isNull(refreshTokens.revokedAt)));
+    .where(
+      and(
+        eq(refreshTokens.tokenHash, tokenHash),
+        isNull(refreshTokens.revokedAt),
+        gt(refreshTokens.expiresAt, new Date()),
+      ),
+    )
+    .returning({ tokenHash: refreshTokens.tokenHash });
+
+  return Boolean(revokedTokens[0]);
 }
 
 export async function requireUser(event: H3Event): Promise<AuthUser> {

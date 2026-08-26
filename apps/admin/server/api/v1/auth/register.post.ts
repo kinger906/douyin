@@ -7,6 +7,10 @@ import { useDb } from '~/server/utils/db';
 import { sendAppError } from '~/server/utils/errors';
 import { hashPassword } from '~/server/utils/password';
 
+function isUniqueViolationError(err: unknown): err is { code: string; detail?: string } {
+  return typeof err === 'object' && err !== null && Reflect.get(err, 'code') === '23505';
+}
+
 export default defineEventHandler(async (event) => {
   try {
     const parsedBody = registerBodySchema.safeParse(await readBody(event));
@@ -41,21 +45,35 @@ export default defineEventHandler(async (event) => {
       }
     }
 
-    const insertedUsers = await db
-      .insert(users)
-      .values({
-        email: body.email,
-        phone: body.phone,
-        displayName: body.displayName,
-        passwordHash: await hashPassword(body.password),
-      })
-      .returning({
-        id: users.id,
-        email: users.email,
-        displayName: users.displayName,
-        role: users.role,
-        status: users.status,
-      });
+    let insertedUsers;
+    try {
+      insertedUsers = await db
+        .insert(users)
+        .values({
+          email: body.email,
+          phone: body.phone,
+          displayName: body.displayName,
+          passwordHash: await hashPassword(body.password),
+        })
+        .returning({
+          id: users.id,
+          email: users.email,
+          displayName: users.displayName,
+          role: users.role,
+          status: users.status,
+        });
+    } catch (err) {
+      if (isUniqueViolationError(err)) {
+        const detail = String(err.detail ?? '');
+        const message =
+          body.phone && detail.includes('phone')
+            ? 'Phone is already registered'
+            : 'Email is already registered';
+        throw new AppError(ErrorCode.CONFLICT, message, 409);
+      }
+
+      throw err;
+    }
 
     return issueAuthTokens(event, insertedUsers[0]);
   } catch (err) {
