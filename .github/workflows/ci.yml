@@ -121,18 +121,25 @@ jobs:
       - name: Sync GitHub Secrets → Vercel Production env
         working-directory: apps/admin
         run: |
-          # CLI 59+ defaults new vars to secret; NUXT_PUBLIC_* must be visibility=config.
+          # CLI 59: production defaults to type=sensitive + visibility=secret.
+          # NUXT_PUBLIC_* cannot be secret; must be --no-sensitive + visibility=config.
           upsert_env() {
             local key="$1"
             local value="$2"
-            local visibility="${3:-secret}"
+            local kind="${3:-secret}"
             if [ -z "$value" ]; then
               echo "Skip empty $key"
               return 0
             fi
             vercel env rm "$key" production --yes --token="$VERCEL_TOKEN" >/dev/null 2>&1 || true
-            printf '%s' "$value" | vercel env add "$key" production --visibility "$visibility" --token="$VERCEL_TOKEN"
-            echo "Synced $key ($visibility)"
+            if [ "$kind" = "config" ]; then
+              printf '%s' "$value" | vercel env add "$key" production \
+                --no-sensitive --visibility config --yes --token="$VERCEL_TOKEN"
+            else
+              printf '%s' "$value" | vercel env add "$key" production \
+                --sensitive --visibility secret --yes --token="$VERCEL_TOKEN"
+            fi
+            echo "Synced $key ($kind)"
           }
 
           upsert_env DATABASE_URL "$DATABASE_URL"
