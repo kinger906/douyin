@@ -52,28 +52,12 @@ jobs:
     timeout-minutes: 25
     environment: production
 
-    env:
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
-      JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
-      JWT_ACCESS_TTL: ${{ secrets.JWT_ACCESS_TTL }}
-      JWT_REFRESH_TTL: ${{ secrets.JWT_REFRESH_TTL }}
-      BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
-      NUXT_PUBLIC_API_BASE: ${{ secrets.NUXT_PUBLIC_API_BASE }}
-      NITRO_PRESET: vercel
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
@@ -81,113 +65,87 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Vercel CLI
-        run: npm install -g vercel@latest
+      - name: Build (Vercel preset → .vercel/output)
+        run: pnpm --filter @douyin/admin build
+        env:
+          NITRO_PRESET: vercel
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
+          JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
+          JWT_ACCESS_TTL: ${{ secrets.JWT_ACCESS_TTL }}
+          JWT_REFRESH_TTL: ${{ secrets.JWT_REFRESH_TTL }}
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          NUXT_PUBLIC_API_BASE: ${{ secrets.NUXT_PUBLIC_API_BASE }}
 
-      - name: Validate required secrets
+      - name: Verify Vercel output
+        working-directory: apps/admin
+        run: test -d .vercel/output || (echo "Missing .vercel/output — check nuxt.config.ts nitro.preset=vercel" && exit 1)
+
+      - name: Install Vercel CLI
+        run: npm i -g vercel@latest
+
+      - name: Sync env vars to Vercel Production
+        working-directory: apps/admin
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
+          JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
+          JWT_ACCESS_TTL: ${{ secrets.JWT_ACCESS_TTL }}
+          JWT_REFRESH_TTL: ${{ secrets.JWT_REFRESH_TTL }}
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
         run: |
-          missing=0
-          for key in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID DATABASE_URL JWT_ACCESS_SECRET JWT_REFRESH_SECRET NUXT_PUBLIC_API_BASE; do
-            if [ -z "${!key}" ]; then
-              echo "::error::Missing required GitHub secret: $key"
-              missing=1
-            fi
-          done
-          if [ "$missing" -ne 0 ]; then
+          set -euo pipefail
+
+          if [ -z "${VERCEL_TOKEN:-}" ] || [ -z "${VERCEL_ORG_ID:-}" ] || [ -z "${VERCEL_PROJECT_ID:-}" ]; then
+            echo "ERROR: VERCEL_TOKEN, VERCEL_ORG_ID, and VERCEL_PROJECT_ID are required"
             exit 1
           fi
-          echo "JWT_ACCESS_TTL=${JWT_ACCESS_TTL:-15m}" >> "$GITHUB_ENV"
-          echo "JWT_REFRESH_TTL=${JWT_REFRESH_TTL:-30d}" >> "$GITHUB_ENV"
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "ERROR: GitHub Secret DATABASE_URL is empty"
+            exit 1
+          fi
+          if [ -z "${JWT_ACCESS_SECRET:-}" ] || [ "${#JWT_ACCESS_SECRET}" -lt 32 ]; then
+            echo "ERROR: GitHub Secret JWT_ACCESS_SECRET must be set and >= 32 characters"
+            exit 1
+          fi
+          if [ -z "${JWT_REFRESH_SECRET:-}" ] || [ "${#JWT_REFRESH_SECRET}" -lt 32 ]; then
+            echo "ERROR: GitHub Secret JWT_REFRESH_SECRET must be set and >= 32 characters"
+            exit 1
+          fi
 
-      - name: Pull Vercel project settings
-        working-directory: apps/admin
-        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
-
-      - name: Fix Vercel project settings for Nuxt
-        working-directory: apps/admin
-        run: |
-          node <<'NODE'
-          const fs = require('fs');
-          const path = '.vercel/project.json';
-          const project = JSON.parse(fs.readFileSync(path, 'utf8'));
-          project.settings = project.settings || {};
-          project.settings.framework = 'nuxtjs';
-          delete project.settings.outputDirectory;
-          fs.writeFileSync(path, JSON.stringify(project, null, 2));
-          console.log('framework=', project.settings.framework);
-          console.log('outputDirectory cleared for Build Output API');
-          NODE
-
-      - name: Sync GitHub Secrets → Vercel Production env
-        working-directory: apps/admin
-        run: |
-          # CLI 59: production defaults to type=sensitive + visibility=secret.
-          # NUXT_PUBLIC_* cannot be secret; must be --no-sensitive + visibility=config.
-          upsert_env() {
-            local key="$1"
+          sync_env() {
+            local name="$1"
             local value="$2"
-            local kind="${3:-secret}"
             if [ -z "$value" ]; then
-              echo "Skip empty $key"
+              echo "Skip $name (empty)"
               return 0
             fi
-            vercel env rm "$key" production --yes --token="$VERCEL_TOKEN" >/dev/null 2>&1 || true
-            if [ "$kind" = "config" ]; then
-              printf '%s' "$value" | vercel env add "$key" production \
-                --no-sensitive --visibility config --yes --token="$VERCEL_TOKEN"
-            else
-              printf '%s' "$value" | vercel env add "$key" production \
-                --sensitive --visibility secret --yes --token="$VERCEL_TOKEN"
-            fi
-            echo "Synced $key ($kind)"
+            echo "Syncing $name → Vercel Production"
+            vercel env rm "$name" production --yes --token="$VERCEL_TOKEN" 2>/dev/null || true
+            printf '%s' "$value" | vercel env add "$name" production --token="$VERCEL_TOKEN"
           }
 
-          upsert_env DATABASE_URL "$DATABASE_URL"
-          upsert_env JWT_ACCESS_SECRET "$JWT_ACCESS_SECRET"
-          upsert_env JWT_REFRESH_SECRET "$JWT_REFRESH_SECRET"
-          upsert_env JWT_ACCESS_TTL "${JWT_ACCESS_TTL:-15m}"
-          upsert_env JWT_REFRESH_TTL "${JWT_REFRESH_TTL:-30d}"
-          upsert_env BLOB_READ_WRITE_TOKEN "$BLOB_READ_WRITE_TOKEN"
-          upsert_env NUXT_PUBLIC_API_BASE "$NUXT_PUBLIC_API_BASE" config
+          sync_env DATABASE_URL "$DATABASE_URL"
+          sync_env JWT_ACCESS_SECRET "$JWT_ACCESS_SECRET"
+          sync_env JWT_REFRESH_SECRET "$JWT_REFRESH_SECRET"
+          sync_env JWT_ACCESS_TTL "${JWT_ACCESS_TTL:-15m}"
+          sync_env JWT_REFRESH_TTL "${JWT_REFRESH_TTL:-30d}"
+          sync_env BLOB_READ_WRITE_TOKEN "${BLOB_READ_WRITE_TOKEN:-}"
+          # NUXT_PUBLIC_* is baked at build time; skip CLI sync (avoids CLI 59 visibility rules).
 
-      - name: Write build env from GitHub Secrets
-        working-directory: apps/admin
-        run: |
-          mkdir -p .vercel
-          {
-            printf 'DATABASE_URL=%s\n' "$DATABASE_URL"
-            printf 'JWT_ACCESS_SECRET=%s\n' "$JWT_ACCESS_SECRET"
-            printf 'JWT_REFRESH_SECRET=%s\n' "$JWT_REFRESH_SECRET"
-            printf 'JWT_ACCESS_TTL=%s\n' "${JWT_ACCESS_TTL:-15m}"
-            printf 'JWT_REFRESH_TTL=%s\n' "${JWT_REFRESH_TTL:-30d}"
-            printf 'BLOB_READ_WRITE_TOKEN=%s\n' "$BLOB_READ_WRITE_TOKEN"
-            printf 'NUXT_PUBLIC_API_BASE=%s\n' "$NUXT_PUBLIC_API_BASE"
-            printf 'NITRO_PRESET=vercel\n'
-          } > .vercel/.env.production.local
-
-      # Single production build in GHA, then upload prebuilt output to Vercel (no second remote build).
-      - name: Build once for Vercel
-        working-directory: apps/admin
-        run: vercel build --prod --token="$VERCEL_TOKEN"
-
-      - name: Verify Build Output API
-        working-directory: apps/admin
-        run: |
-          if [ ! -d .vercel/output ]; then
-            echo "::error::Expected .vercel/output after vercel build (Nitro vercel preset)."
-            ls -la .vercel || true
-            ls -la .output || true
-            exit 1
-          fi
-          ls -la .vercel/output
-
-      - name: Push prebuilt to Vercel Production
+      - name: Deploy to Vercel (prebuilt)
         working-directory: apps/admin
         id: deploy
         run: |
-          url="$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")"
+          url="$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})"
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "Deployed: $url"
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
       - name: Summary
         run: |
@@ -197,5 +155,5 @@ jobs:
             echo "- URL: ${{ steps.deploy.outputs.url }}"
             echo "- Branch: \`${{ github.ref_name }}\`"
             echo "- Commit: \`${{ github.sha }}\`"
-            echo "- Build: once in GitHub Actions → \`vercel deploy --prebuilt\`"
+            echo "- Build: \`pnpm --filter @douyin/admin build\` (NITRO_PRESET=vercel) → \`vercel deploy --prebuilt\`"
           } >> "$GITHUB_STEP_SUMMARY"
