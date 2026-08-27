@@ -15,7 +15,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
-import type { MeProfile, MyVideoItem } from '@douyin/api-client';
+import type { MeProfile, MyVideoItem, SavedVideoItem } from '@douyin/api-client';
 
 import { mobileApi } from '@/lib/api';
 import { formatCount } from '@/lib/format';
@@ -38,6 +38,8 @@ export default function ProfileScreen() {
   const patchUser = useSessionStore((state) => state.patchUser);
   const [profile, setProfile] = useState<MeProfile | null>(null);
   const [videos, setVideos] = useState<MyVideoItem[]>([]);
+  const [liked, setLiked] = useState<SavedVideoItem[]>([]);
+  const [favorites, setFavorites] = useState<SavedVideoItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,9 +51,16 @@ export default function ProfileScreen() {
     else setLoading(true);
     setError(null);
     try {
-      const [me, mine] = await Promise.all([mobileApi.getMe(), mobileApi.getMyVideos()]);
+      const [me, mine, myLikes, myFavorites] = await Promise.all([
+        mobileApi.getMe(),
+        mobileApi.getMyVideos(),
+        mobileApi.getMyLikes(),
+        mobileApi.getMyFavorites(),
+      ]);
       setProfile(me);
       setVideos(mine.items);
+      setLiked(myLikes.items);
+      setFavorites(myFavorites.items);
       await patchUser({
         displayName: me.displayName,
         avatarUrl: me.avatarUrl,
@@ -126,6 +135,27 @@ export default function ProfileScreen() {
   const stats = profile?.stats;
   const avatarUrl = profile?.avatarUrl ?? sessionUser?.avatarUrl;
 
+  const gridItems: Array<MyVideoItem | SavedVideoItem> =
+    tab === 'works' ? videos : tab === 'liked' ? liked : tab === 'collections' ? favorites : [];
+
+  const emptyTitle =
+    tab === 'works'
+      ? '还没有作品'
+      : tab === 'liked'
+        ? '还没有喜欢'
+        : tab === 'collections'
+          ? '还没有收藏'
+          : '暂无私密内容';
+
+  const emptyHint =
+    tab === 'works'
+      ? '点底部「+」发布第一条视频'
+      : tab === 'liked'
+        ? '在首页双击或点赞后会出现在这里'
+        : tab === 'collections'
+          ? '在首页点「收藏」后会出现在这里'
+          : '该能力稍后开放';
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.topBar}>
@@ -153,8 +183,8 @@ export default function ProfileScreen() {
         </View>
       ) : (
         <FlatList
-          data={tab === 'works' ? videos : []}
-          keyExtractor={(item) => item.id}
+          data={gridItems}
+          keyExtractor={(item) => `${tab}-${item.id}`}
           numColumns={COLS}
           columnWrapperStyle={styles.row}
           refreshControl={
@@ -215,16 +245,14 @@ export default function ProfileScreen() {
               <View style={styles.segment}>
                 {(
                   [
-                    ['works', '作品'],
+                    ['works', `作品 ${stats?.works ?? videos.length}`],
                     ['private', '私密'],
-                    ['collections', '收藏'],
-                    ['liked', '喜欢'],
+                    ['collections', `收藏 ${favorites.length}`],
+                    ['liked', `喜欢 ${liked.length}`],
                   ] as const
                 ).map(([key, label]) => (
                   <Pressable key={key} onPress={() => setTab(key)} style={styles.segmentItem}>
-                    <Text style={[styles.segmentText, tab === key && styles.segmentTextActive]}>
-                      {key === 'works' ? `${label} ${stats?.works ?? videos.length}` : label}
-                    </Text>
+                    <Text style={[styles.segmentText, tab === key && styles.segmentTextActive]}>{label}</Text>
                     {tab === key ? <View style={styles.segmentUnderline} /> : null}
                   </Pressable>
                 ))}
@@ -233,16 +261,12 @@ export default function ProfileScreen() {
           }
           ListEmptyComponent={
             <View style={styles.emptyBlock}>
-              <Text style={styles.emptyTitle}>
-                {tab === 'works' ? '还没有作品' : '该能力稍后开放'}
-              </Text>
-              <Text style={styles.emptyHint}>
-                {tab === 'works' ? '点底部「+」发布第一条视频' : '敬请期待'}
-              </Text>
+              <Text style={styles.emptyTitle}>{emptyTitle}</Text>
+              <Text style={styles.emptyHint}>{emptyHint}</Text>
             </View>
           }
           renderItem={({ item }) => {
-            const badge = statusLabel(item.status);
+            const badge = tab === 'works' ? statusLabel(item.status) : null;
             return (
               <View style={styles.tile}>
                 {item.coverUrl ? (

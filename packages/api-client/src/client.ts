@@ -20,6 +20,11 @@ import type {
   VideoRecord,
   MeProfile,
   MyVideosResponse,
+  SavedVideosResponse,
+  FavoriteResponse,
+  FollowResponse,
+  FollowingResponse,
+  InboxResponse,
 } from './types';
 
 export class ApiClientError extends Error {
@@ -136,12 +141,48 @@ export function createApiClient(options: CreateApiClientOptions) {
       return request<MyVideosResponse>('/me/videos', { query: { status } });
     },
 
+    getMyLikes() {
+      return request<SavedVideosResponse>('/me/likes');
+    },
+
+    getMyFavorites() {
+      return request<SavedVideosResponse>('/me/favorites');
+    },
+
+    getFollowing() {
+      return request<FollowingResponse>('/me/following');
+    },
+
+    getInbox() {
+      return request<InboxResponse>('/me/inbox');
+    },
+
+    getFriendsFeed(cursor?: string) {
+      return request<FeedResponse>('/feed/friends', { query: { cursor } });
+    },
+
     like(videoId: string) {
       return request<LikeResponse>(`/videos/${videoId}/like`, { method: 'POST' });
     },
 
     unlike(videoId: string) {
       return request<UnlikeResponse>(`/videos/${videoId}/like`, { method: 'DELETE' });
+    },
+
+    favorite(videoId: string) {
+      return request<FavoriteResponse>(`/videos/${videoId}/favorite`, { method: 'POST' });
+    },
+
+    unfavorite(videoId: string) {
+      return request<FavoriteResponse>(`/videos/${videoId}/favorite`, { method: 'DELETE' });
+    },
+
+    follow(userId: string) {
+      return request<FollowResponse>(`/users/${userId}/follow`, { method: 'POST' });
+    },
+
+    unfollow(userId: string) {
+      return request<FollowResponse>(`/users/${userId}/follow`, { method: 'DELETE' });
     },
 
     listComments(videoId: string) {

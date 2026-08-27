@@ -1,26 +1,40 @@
 import { comments, favorites, follows, likes, users, videos } from '@douyin/db';
 import { AppError, ErrorCode, VIDEO_STATUS } from '@douyin/shared';
-import { and, desc, eq, lt, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, lt, or, sql } from 'drizzle-orm';
 import { defineEventHandler, getQuery } from 'h3';
-import { decodeCursor, encodeCursor } from '~/server/utils/feed-query';
-import { getOptionalUser } from '~/server/utils/video-api';
+import { requireUser } from '~/server/utils/auth';
 import { useDb } from '~/server/utils/db';
 import { sendAppError } from '~/server/utils/errors';
+import { decodeCursor, encodeCursor } from '~/server/utils/feed-query';
 
 const FEED_PAGE_SIZE = 10;
 
 export default defineEventHandler(async (event) => {
   try {
-    const viewer = await getOptionalUser(event);
+    const viewer = await requireUser(event);
     const query = getQuery(event);
     const cursorParam = Array.isArray(query.cursor) ? query.cursor[0] : query.cursor;
+    const db = useDb();
 
-    let whereClause = eq(videos.status, VIDEO_STATUS.APPROVED);
+    const following = await db
+      .select({ id: follows.followingId })
+      .from(follows)
+      .where(eq(follows.followerId, viewer.id));
+
+    const followingIds = following.map((row) => row.id);
+    if (!followingIds.length) {
+      return { items: [], nextCursor: null };
+    }
+
+    let whereClause = and(
+      eq(videos.status, VIDEO_STATUS.APPROVED),
+      inArray(videos.authorId, followingIds),
+    );
+
     if (cursorParam !== undefined) {
       if (typeof cursorParam !== 'string' || !cursorParam) {
         throw new AppError(ErrorCode.VALIDATION_FAILED, 'Invalid cursor', 400);
       }
-
       const cursor = decodeCursor(cursorParam);
       whereClause = and(
         whereClause,
@@ -31,7 +45,7 @@ export default defineEventHandler(async (event) => {
       )!;
     }
 
-    const rows = await useDb()
+    const rows = await db
       .select({
         id: videos.id,
         title: videos.title,
@@ -44,37 +58,21 @@ export default defineEventHandler(async (event) => {
         authorDisplayName: users.displayName,
         authorAvatarUrl: users.avatarUrl,
         likeCount: sql<number>`(
-          select count(*)::int
-          from ${likes}
-          where ${likes.videoId} = ${videos.id}
+          select count(*)::int from ${likes} where ${likes.videoId} = ${videos.id}
         )`,
         commentCount: sql<number>`(
-          select count(*)::int
-          from ${comments}
-          where ${comments.videoId} = ${videos.id}
-            and ${comments.status} = 'visible'
+          select count(*)::int from ${comments}
+          where ${comments.videoId} = ${videos.id} and ${comments.status} = 'visible'
         )`,
-        likedByMe: viewer
-          ? sql<boolean>`exists(
-              select 1 from ${likes}
-              where ${likes.videoId} = ${videos.id}
-                and ${likes.userId} = ${viewer.id}::uuid
-            )`
-          : sql<boolean>`false`,
-        favoritedByMe: viewer
-          ? sql<boolean>`exists(
-              select 1 from ${favorites}
-              where ${favorites.videoId} = ${videos.id}
-                and ${favorites.userId} = ${viewer.id}::uuid
-            )`
-          : sql<boolean>`false`,
-        followedByMe: viewer
-          ? sql<boolean>`exists(
-              select 1 from ${follows}
-              where ${follows.followingId} = ${videos.authorId}
-                and ${follows.followerId} = ${viewer.id}::uuid
-            )`
-          : sql<boolean>`false`,
+        likedByMe: sql<boolean>`exists(
+          select 1 from ${likes}
+          where ${likes.videoId} = ${videos.id} and ${likes.userId} = ${viewer.id}::uuid
+        )`,
+        favoritedByMe: sql<boolean>`exists(
+          select 1 from ${favorites}
+          where ${favorites.videoId} = ${videos.id} and ${favorites.userId} = ${viewer.id}::uuid
+        )`,
+        followedByMe: sql<boolean>`true`,
       })
       .from(videos)
       .leftJoin(users, eq(users.id, videos.authorId))
@@ -102,7 +100,7 @@ export default defineEventHandler(async (event) => {
         commentCount: Number(row.commentCount ?? 0),
         likedByMe: Boolean(row.likedByMe),
         favoritedByMe: Boolean(row.favoritedByMe),
-        followedByMe: Boolean(row.followedByMe),
+        followedByMe: true,
       })),
       nextCursor:
         rows.length > FEED_PAGE_SIZE && lastRow ? encodeCursor(lastRow.createdAt, lastRow.id) : null,
@@ -111,7 +109,6 @@ export default defineEventHandler(async (event) => {
     if (err instanceof Error && err.message === 'Invalid cursor') {
       return sendAppError(event, new AppError(ErrorCode.VALIDATION_FAILED, 'Invalid cursor', 400));
     }
-
     return sendAppError(event, err);
   }
 });

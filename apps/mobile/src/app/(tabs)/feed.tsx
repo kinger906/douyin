@@ -39,6 +39,8 @@ function FeedVideo({
   onOpenComments,
   onToggleLike,
   onLikeOnly,
+  onToggleFavorite,
+  onToggleFollow,
 }: {
   item: FeedItem;
   active: boolean;
@@ -46,6 +48,8 @@ function FeedVideo({
   onOpenComments: () => void;
   onToggleLike: () => void;
   onLikeOnly: () => void;
+  onToggleFavorite: () => void;
+  onToggleFollow: () => void;
 }) {
   const insets = useSafeAreaInsets();
   const player = useVideoPlayer(item.blobUrl, (p) => {
@@ -63,10 +67,18 @@ function FeedVideo({
   const savedTy = useSharedValue(0);
 
   useEffect(() => {
-    if (active && !pausedByUser) {
-      player.play();
+    if (active) {
+      try {
+        player.currentTime = 0;
+      } catch {
+        // ignore seek errors on cold start
+      }
+      if (!pausedByUser) {
+        player.play();
+      }
     } else {
       player.pause();
+      setPausedByUser(false);
     }
   }, [active, pausedByUser, player]);
 
@@ -190,13 +202,15 @@ function FeedVideo({
       ) : null}
 
       <View style={[styles.rightRail, { bottom: 88 + insets.bottom }]} pointerEvents="box-none">
-        <Pressable style={styles.avatarWrap}>
+        <Pressable style={styles.avatarWrap} onPress={onToggleFollow}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{initial}</Text>
           </View>
-          <View style={styles.followPlus}>
-            <Text style={styles.followPlusText}>+</Text>
-          </View>
+          {!item.followedByMe ? (
+            <View style={styles.followPlus}>
+              <Text style={styles.followPlusText}>+</Text>
+            </View>
+          ) : null}
         </Pressable>
 
         <Pressable style={styles.action} onPress={onToggleLike}>
@@ -209,9 +223,9 @@ function FeedVideo({
           <Text style={styles.actionCount}>{formatCount(item.commentCount)}</Text>
         </Pressable>
 
-        <Pressable style={styles.action}>
-          <Text style={styles.actionIcon}>★</Text>
-          <Text style={styles.actionCount}>收藏</Text>
+        <Pressable style={styles.action} onPress={onToggleFavorite}>
+          <Text style={[styles.actionIcon, item.favoritedByMe && styles.favorited]}>★</Text>
+          <Text style={styles.actionCount}>{item.favoritedByMe ? '已收藏' : '收藏'}</Text>
         </Pressable>
 
         <Pressable style={styles.action}>
@@ -249,12 +263,13 @@ export default function FeedScreen() {
   const [commentDraft, setCommentDraft] = useState('');
   const [sending, setSending] = useState(false);
 
-  const load = useCallback(async (isRefresh = false) => {
+  const load = useCallback(async (isRefresh = false, source: 'recommend' | 'following' = tab) => {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
     setError(null);
     try {
-      const res = await mobileApi.getFeed();
+      const res =
+        source === 'following' ? await mobileApi.getFriendsFeed() : await mobileApi.getFeed();
       setItems(res.items);
       setActiveId(res.items[0]?.id ?? null);
       setActiveIndex(0);
@@ -267,11 +282,11 @@ export default function FeedScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [tab]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void load(false, tab);
+  }, [load, tab]);
 
   const openComments = useCallback(async (videoId: string) => {
     setCommentsVideoId(videoId);
@@ -328,6 +343,45 @@ export default function FeedScreen() {
     },
     [applyLikeState],
   );
+
+  const toggleFavorite = useCallback(async (item: FeedItem) => {
+    const next = !item.favoritedByMe;
+    setItems((prev) =>
+      prev.map((row) => (row.id === item.id ? { ...row, favoritedByMe: next } : row)),
+    );
+    try {
+      if (next) await mobileApi.favorite(item.id);
+      else await mobileApi.unfavorite(item.id);
+    } catch {
+      setItems((prev) =>
+        prev.map((row) =>
+          row.id === item.id ? { ...row, favoritedByMe: item.favoritedByMe } : row,
+        ),
+      );
+    }
+  }, []);
+
+  const toggleFollow = useCallback(async (item: FeedItem) => {
+    if (!item.author?.id) return;
+    const next = !item.followedByMe;
+    setItems((prev) =>
+      prev.map((row) =>
+        row.author?.id === item.author.id ? { ...row, followedByMe: next } : row,
+      ),
+    );
+    try {
+      if (next) await mobileApi.follow(item.author.id);
+      else await mobileApi.unfollow(item.author.id);
+    } catch {
+      setItems((prev) =>
+        prev.map((row) =>
+          row.author?.id === item.author.id
+            ? { ...row, followedByMe: item.followedByMe }
+            : row,
+        ),
+      );
+    }
+  }, []);
 
   const sendComment = useCallback(async () => {
     if (!commentsVideoId || !commentDraft.trim() || sending) return;
@@ -436,10 +490,10 @@ export default function FeedScreen() {
         </Pressable>
       </View>
 
-      {tab === 'following' ? (
+      {tab === 'following' && !items.length && !loading ? (
         <View style={styles.center}>
-          <Text style={styles.empty}>关注流稍后开放</Text>
-          <Text style={styles.emptyHint}>先刷「推荐」看看吧</Text>
+          <Text style={styles.empty}>还没有关注的人</Text>
+          <Text style={styles.emptyHint}>在推荐页点头像旁「+」关注后，这里会出现朋友作品</Text>
         </View>
       ) : (
         <FlatList
@@ -454,6 +508,8 @@ export default function FeedScreen() {
               onOpenComments={() => void openComments(item.id)}
               onToggleLike={() => void toggleLike(item)}
               onLikeOnly={() => void likeOnly(item)}
+              onToggleFavorite={() => void toggleFavorite(item)}
+              onToggleFollow={() => void toggleFollow(item)}
             />
           )}
           pagingEnabled
@@ -469,7 +525,7 @@ export default function FeedScreen() {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => void load(true)}
+              onRefresh={() => void load(true, tab)}
               tintColor="#fe2c55"
               progressViewOffset={insets.top + 48}
               enabled={activeIndex === 0}
@@ -477,7 +533,6 @@ export default function FeedScreen() {
           }
         />
       )}
-
       <Modal visible={commentsOpen} animationType="slide" transparent onRequestClose={() => setCommentsOpen(false)}>
         <Pressable style={styles.sheetBackdrop} onPress={() => setCommentsOpen(false)} />
         <KeyboardAvoidingView
@@ -617,6 +672,7 @@ const styles = StyleSheet.create({
   action: { alignItems: 'center', gap: 4 },
   actionIcon: { fontSize: 32, color: '#fff', textShadowColor: 'rgba(0,0,0,0.45)', textShadowRadius: 4 },
   liked: { color: '#fe2c55' },
+  favorited: { color: '#facd00' },
   actionCount: { color: '#fff', fontSize: 12, fontWeight: '600' },
   meta: { position: 'absolute', left: 12, right: 88, zIndex: 5 },
   author: { color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 6 },

@@ -43,6 +43,8 @@ export type FeedItem = {
   likeCount: number;
   commentCount: number;
   likedByMe: boolean;
+  favoritedByMe?: boolean;
+  followedByMe?: boolean;
 };
 
 export type FeedResponse = {
@@ -167,6 +169,63 @@ export type MyVideoItem = {
 
 export type MyVideosResponse = {
   items: MyVideoItem[];
+};
+
+export type SavedVideoItem = MyVideoItem & {
+  author?: {
+    id: string;
+    displayName: string;
+    avatarUrl: string | null;
+  };
+};
+
+export type SavedVideosResponse = {
+  items: SavedVideoItem[];
+};
+
+export type FavoriteResponse = {
+  favorited: boolean;
+  favorite?: {
+    userId: string;
+    videoId: string;
+    createdAt: string;
+  } | null;
+};
+
+export type FollowResponse = {
+  following: boolean;
+};
+
+export type FollowingUser = {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+  followedAt: string;
+  works: number;
+};
+
+export type FollowingResponse = {
+  followingCount: number;
+  followerCount: number;
+  items: FollowingUser[];
+};
+
+export type InboxItem = {
+  id: string;
+  type: 'like' | 'favorite' | 'comment' | 'follow';
+  title: string;
+  body: string;
+  actor: {
+    id: string;
+    displayName: string;
+    avatarUrl: string | null;
+  };
+  videoId: string | null;
+  createdAt: string;
+};
+
+export type InboxResponse = {
+  items: InboxItem[];
 };
 
 export type CreateApiClientOptions = {

@@ -214,6 +214,21 @@ export const mobileApi = {
   getMyVideos(status?: string) {
     return withAuthRetry(() => authedClient.getMyVideos(status));
   },
+  getMyLikes() {
+    return withAuthRetry(() => authedClient.getMyLikes());
+  },
+  getMyFavorites() {
+    return withAuthRetry(() => authedClient.getMyFavorites());
+  },
+  getFollowing() {
+    return withAuthRetry(() => authedClient.getFollowing());
+  },
+  getInbox() {
+    return withAuthRetry(() => authedClient.getInbox());
+  },
+  getFriendsFeed(cursor?: string) {
+    return withAuthRetry(() => authedClient.getFriendsFeed(cursor));
+  },
   requestUpload(purpose: UploadPurpose = 'video'): Promise<UploadTicket> {
     return withAuthRetry(() => requestUploadTicket(purpose));
   },
@@ -231,6 +246,18 @@ export const mobileApi = {
   },
   unlike(videoId: string): Promise<UnlikeResponse> {
     return withAuthRetry(() => authedClient.unlike(videoId));
+  },
+  favorite(videoId: string) {
+    return withAuthRetry(() => authedClient.favorite(videoId));
+  },
+  unfavorite(videoId: string) {
+    return withAuthRetry(() => authedClient.unfavorite(videoId));
+  },
+  follow(userId: string) {
+    return withAuthRetry(() => authedClient.follow(userId));
+  },
+  unfollow(userId: string) {
+    return withAuthRetry(() => authedClient.unfollow(userId));
   },
   listComments(videoId: string): Promise<CommentsResponse> {
     return withAuthRetry(() => authedClient.listComments(videoId));

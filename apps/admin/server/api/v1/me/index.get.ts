@@ -1,4 +1,4 @@
-import { comments, likes, users, videos } from '@douyin/db';
+import { comments, follows, likes, users, videos } from '@douyin/db';
 import { VIDEO_STATUS } from '@douyin/shared';
 import { and, count, eq } from 'drizzle-orm';
 import { defineEventHandler } from 'h3';
@@ -45,6 +45,16 @@ export default defineEventHandler(async (event) => {
       .innerJoin(videos, eq(videos.id, comments.videoId))
       .where(and(eq(videos.authorId, user.id), eq(comments.status, 'visible')));
 
+    const [followingRow] = await db
+      .select({ value: count() })
+      .from(follows)
+      .where(eq(follows.followerId, user.id));
+
+    const [followersRow] = await db
+      .select({ value: count() })
+      .from(follows)
+      .where(eq(follows.followingId, user.id));
+
     const id = profile?.id ?? user.id;
 
     return {
@@ -59,8 +69,8 @@ export default defineEventHandler(async (event) => {
         commentsReceived: Number(commentsReceivedRow?.value ?? 0),
         works: Number(worksRow?.value ?? 0),
         approvedWorks: Number(approvedRow?.value ?? 0),
-        following: 0,
-        followers: 0,
+        following: Number(followingRow?.value ?? 0),
+        followers: Number(followersRow?.value ?? 0),
         mutualFollows: 0,
       },
     };
