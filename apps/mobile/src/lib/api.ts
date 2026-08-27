@@ -7,6 +7,7 @@ import {
   type FeedResponse,
   type LikeResponse,
   type LogoutResponse,
+  type MeProfile,
   type UnlikeResponse,
   type VideoRecord,
 } from '@douyin/api-client';
@@ -14,11 +15,14 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 import { useSessionStore } from '@/store/session';
 
+export type UploadPurpose = 'video' | 'cover' | 'avatar';
+
 export type UploadTicket = {
   uploadUrl: string | null;
   clientToken: string | null;
   mock: boolean;
   pathname: string;
+  purpose?: UploadPurpose;
   note?: string;
 };
 
@@ -102,11 +106,15 @@ async function withAuthRetry<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
-async function requestUploadTicket(): Promise<UploadTicket> {
+async function requestUploadTicket(purpose: UploadPurpose = 'video'): Promise<UploadTicket> {
   const accessToken = useSessionStore.getState().accessToken;
   const response = await fetch(`${apiBaseUrl}/api/v1/uploads/blob`, {
     method: 'POST',
-    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    body: JSON.stringify({ purpose }),
   });
 
   if (!response.ok) {
@@ -121,17 +129,15 @@ async function requestUploadTicket(): Promise<UploadTicket> {
   return (await response.json()) as UploadTicket;
 }
 
-async function uploadVideoBlob(
+async function uploadBlobFile(
   ticket: UploadTicket,
   asset: { uri: string; fileName?: string | null; mimeType?: string | null },
+  fallbackMime: string,
 ): Promise<UploadBlobResponse> {
   const accessToken = useSessionStore.getState().accessToken;
-  const fileName = asset.fileName ?? `${ticket.pathname.split('/').pop() ?? 'upload.mp4'}`;
-  const mimeType = asset.mimeType ?? 'video/mp4';
+  const fileName = asset.fileName ?? `${ticket.pathname.split('/').pop() ?? 'upload.bin'}`;
+  const mimeType = asset.mimeType ?? fallbackMime;
 
-  // React Native fetch + FormData `{ uri, name, type }` throws
-  // "Unsupported FormDataPart implementation" on modern Expo/Android.
-  // Use FileSystem multipart upload instead.
   const result = await FileSystem.uploadAsync(
     `${apiBaseUrl}/api/v1/uploads/blob/proxy`,
     asset.uri,
@@ -145,7 +151,6 @@ async function uploadVideoBlob(
       },
       headers: {
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        // Helps some servers associate original filename
         'Upload-Filename': fileName,
       },
     },
@@ -202,14 +207,21 @@ export const mobileApi = {
   getMe() {
     return withAuthRetry(() => authedClient.getMe());
   },
+  async updateMe(body: { displayName?: string; avatarUrl?: string | null }): Promise<MeProfile> {
+    await withAuthRetry(() => authedClient.updateMe(body));
+    return withAuthRetry(() => authedClient.getMe());
+  },
   getMyVideos(status?: string) {
     return withAuthRetry(() => authedClient.getMyVideos(status));
   },
-  requestUpload(): Promise<UploadTicket> {
-    return withAuthRetry(() => requestUploadTicket());
+  requestUpload(purpose: UploadPurpose = 'video'): Promise<UploadTicket> {
+    return withAuthRetry(() => requestUploadTicket(purpose));
   },
   uploadVideo(ticket: UploadTicket, asset: { uri: string; fileName?: string | null; mimeType?: string | null }) {
-    return withAuthRetry(() => uploadVideoBlob(ticket, asset));
+    return withAuthRetry(() => uploadBlobFile(ticket, asset, 'video/mp4'));
+  },
+  uploadImage(ticket: UploadTicket, asset: { uri: string; fileName?: string | null; mimeType?: string | null }) {
+    return withAuthRetry(() => uploadBlobFile(ticket, asset, 'image/jpeg'));
   },
   createVideo(body: CreateVideoBody): Promise<VideoRecord> {
     return withAuthRetry(() => authedClient.createVideo(body));

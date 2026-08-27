@@ -1,8 +1,10 @@
+import 'react-native-gesture-handler';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { useSessionStore } from '@/store/session';
 
@@ -42,14 +44,17 @@ function BootGate() {
 
 export default function RootLayout() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <StatusBar style="light" />
-      <BootGate />
-    </QueryClientProvider>
+    <GestureHandlerRootView style={styles.root}>
+      <QueryClientProvider client={queryClient}>
+        <StatusBar style="light" />
+        <BootGate />
+      </QueryClientProvider>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
   loadingScreen: {
     flex: 1,
     alignItems: 'center',

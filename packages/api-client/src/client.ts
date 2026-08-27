@@ -128,6 +128,10 @@ export function createApiClient(options: CreateApiClientOptions) {
       return request<MeProfile>('/me');
     },
 
+    updateMe(body: { displayName?: string; avatarUrl?: string | null }) {
+      return request<MeProfile>('/me', { method: 'PATCH', body });
+    },
+
     getMyVideos(status?: string) {
       return request<MyVideosResponse>('/me/videos', { query: { status } });
     },

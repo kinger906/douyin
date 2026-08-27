@@ -16,6 +16,7 @@ type SessionState = {
   user: SessionUser | null;
   hydrate: () => Promise<void>;
   setSession: (session: AuthSuccessResponse) => Promise<void>;
+  patchUser: (user: Partial<SessionUser>) => Promise<void>;
   clearSession: () => Promise<void>;
 };
 
@@ -69,6 +70,13 @@ export const useSessionStore = create<SessionState>((set) => ({
       user: session.user,
       hydrated: true,
     });
+  },
+  async patchUser(partial) {
+    const current = useSessionStore.getState().user;
+    if (!current) return;
+    const user = { ...current, ...partial };
+    await writeValue(USER_KEY, JSON.stringify(user));
+    set({ user });
   },
   async clearSession() {
     await Promise.all([

@@ -12,6 +12,7 @@ export type AuthUser = {
   email: string | null;
   displayName: string;
   role: string;
+  avatarUrl?: string | null;
 };
 
 export type AuthSuccessResponse = {

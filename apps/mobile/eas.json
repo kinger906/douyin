@@ -10,7 +10,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_BASE": "https://douyin-seven-wine.vercel.app"
+        "EXPO_PUBLIC_API_BASE": "https://www.ijason.online/"
       }
     }
   }

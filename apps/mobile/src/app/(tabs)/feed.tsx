@@ -7,22 +7,30 @@ import {
   Modal,
   Platform,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   TextInput,
   View,
   type NativeScrollEvent,
-  type NativeSyntheticEvent,
   type ViewToken,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useVideoPlayer, VideoView } from 'expo-video';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+  runOnJS,
+} from 'react-native-reanimated';
 import type { CommentItem, FeedItem } from '@douyin/api-client';
 
 import { mobileApi } from '@/lib/api';
 import { formatCount } from '@/lib/format';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
 function FeedVideo({
   item,
@@ -30,40 +38,158 @@ function FeedVideo({
   height,
   onOpenComments,
   onToggleLike,
+  onLikeOnly,
 }: {
   item: FeedItem;
   active: boolean;
   height: number;
   onOpenComments: () => void;
   onToggleLike: () => void;
+  onLikeOnly: () => void;
 }) {
   const insets = useSafeAreaInsets();
   const player = useVideoPlayer(item.blobUrl, (p) => {
     p.loop = true;
   });
+  const [pausedByUser, setPausedByUser] = useState(false);
+  const [showHeart, setShowHeart] = useState(false);
+  const heartOpacity = useSharedValue(0);
+  const heartScale = useSharedValue(0.4);
+  const scale = useSharedValue(1);
+  const savedScale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const savedTx = useSharedValue(0);
+  const savedTy = useSharedValue(0);
 
   useEffect(() => {
-    if (active) {
+    if (active && !pausedByUser) {
       player.play();
     } else {
       player.pause();
     }
-  }, [active, player]);
+  }, [active, pausedByUser, player]);
+
+  useEffect(() => {
+    if (!active) {
+      setPausedByUser(false);
+      scale.value = 1;
+      savedScale.value = 1;
+      translateX.value = 0;
+      translateY.value = 0;
+      savedTx.value = 0;
+      savedTy.value = 0;
+    }
+  }, [active, scale, savedScale, translateX, translateY, savedTx, savedTy]);
+
+  const flashHeart = useCallback(() => {
+    setShowHeart(true);
+    heartOpacity.value = 1;
+    heartScale.value = 0.4;
+    heartScale.value = withSpring(1.15, { damping: 12 });
+    heartOpacity.value = withTiming(0, { duration: 700 }, (finished) => {
+      if (finished) runOnJS(setShowHeart)(false);
+    });
+  }, [heartOpacity, heartScale]);
+
+  const togglePlay = useCallback(() => {
+    setPausedByUser((prev) => !prev);
+  }, []);
+
+  const handleDoubleLike = useCallback(() => {
+    flashHeart();
+    onLikeOnly();
+  }, [flashHeart, onLikeOnly]);
+
+  const singleTap = Gesture.Tap()
+    .maxDuration(250)
+    .onEnd(() => {
+      runOnJS(togglePlay)();
+    });
+
+  const doubleTap = Gesture.Tap()
+    .numberOfTaps(2)
+    .maxDuration(280)
+    .onEnd(() => {
+      runOnJS(handleDoubleLike)();
+    });
+
+  const pinch = Gesture.Pinch()
+    .onUpdate((e) => {
+      const next = Math.min(3, Math.max(1, savedScale.value * e.scale));
+      scale.value = next;
+    })
+    .onEnd(() => {
+      if (scale.value < 1.05) {
+        scale.value = withSpring(1);
+        translateX.value = withSpring(0);
+        translateY.value = withSpring(0);
+        savedScale.value = 1;
+        savedTx.value = 0;
+        savedTy.value = 0;
+      } else {
+        savedScale.value = scale.value;
+      }
+    });
+
+  const pan = Gesture.Pan()
+    .averageTouches(true)
+    .minPointers(2)
+    .onUpdate((e) => {
+      if (scale.value <= 1.01) return;
+      translateX.value = savedTx.value + e.translationX;
+      translateY.value = savedTy.value + e.translationY;
+    })
+    .onEnd(() => {
+      savedTx.value = translateX.value;
+      savedTy.value = translateY.value;
+    });
+
+  const taps = Gesture.Exclusive(doubleTap, singleTap);
+  const composed = Gesture.Simultaneous(taps, Gesture.Simultaneous(pinch, pan));
+
+  const videoStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
+  }));
+
+  const heartStyle = useAnimatedStyle(() => ({
+    opacity: heartOpacity.value,
+    transform: [{ scale: heartScale.value }],
+  }));
 
   const authorName = item.author?.displayName || '用户';
   const initial = authorName.slice(0, 1).toUpperCase();
 
   return (
     <View style={[styles.page, { height }]}>
-      <VideoView
-        player={player}
-        style={StyleSheet.absoluteFill}
-        contentFit="cover"
-        nativeControls={false}
-      />
-      <View style={styles.gradient} pointerEvents="none" />
+      <GestureDetector gesture={composed}>
+        <Animated.View style={[StyleSheet.absoluteFill, videoStyle]}>
+          <VideoView
+            player={player}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            nativeControls={false}
+          />
+        </Animated.View>
+      </GestureDetector>
 
-      <View style={[styles.rightRail, { bottom: 88 + insets.bottom }]}>
+      {pausedByUser && active ? (
+        <View style={styles.pauseBadge} pointerEvents="none">
+          <Text style={styles.pauseBadgeText}>❚❚</Text>
+        </View>
+      ) : null}
+
+      {showHeart ? (
+        <Animated.View style={[styles.heartBurst, heartStyle]} pointerEvents="none">
+          <Text style={styles.heartBurstText}>♥</Text>
+        </Animated.View>
+      ) : null}
+
+      <View style={[styles.rightRail, { bottom: 88 + insets.bottom }]} pointerEvents="box-none">
         <Pressable style={styles.avatarWrap}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{initial}</Text>
@@ -94,7 +220,7 @@ function FeedVideo({
         </Pressable>
       </View>
 
-      <View style={[styles.meta, { bottom: 24 + insets.bottom }]}>
+      <View style={[styles.meta, { bottom: 24 + insets.bottom }]} pointerEvents="none">
         <Text style={styles.author}>@{authorName}</Text>
         <Text style={styles.caption} numberOfLines={2}>
           {item.description || item.title}
@@ -106,10 +232,13 @@ function FeedVideo({
 
 export default function FeedScreen() {
   const insets = useSafeAreaInsets();
+  const listRef = useRef<FlatList<FeedItem>>(null);
   const [items, setItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
   const [tab, setTab] = useState<'following' | 'recommend'>('recommend');
   const [pageHeight, setPageHeight] = useState(SCREEN_HEIGHT);
 
@@ -120,17 +249,23 @@ export default function FeedScreen() {
   const [commentDraft, setCommentDraft] = useState('');
   const [sending, setSending] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
     setError(null);
     try {
       const res = await mobileApi.getFeed();
       setItems(res.items);
       setActiveId(res.items[0]?.id ?? null);
+      setActiveIndex(0);
+      if (isRefresh && res.items[0]) {
+        listRef.current?.scrollToOffset({ offset: 0, animated: true });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
@@ -153,8 +288,7 @@ export default function FeedScreen() {
     }
   }, []);
 
-  const toggleLike = useCallback(async (item: FeedItem) => {
-    const nextLiked = !item.likedByMe;
+  const applyLikeState = useCallback((item: FeedItem, nextLiked: boolean) => {
     setItems((prev) =>
       prev.map((row) =>
         row.id === item.id
@@ -166,36 +300,46 @@ export default function FeedScreen() {
           : row,
       ),
     );
-    try {
-      if (nextLiked) await mobileApi.like(item.id);
-      else await mobileApi.unlike(item.id);
-    } catch {
-      setItems((prev) =>
-        prev.map((row) =>
-          row.id === item.id
-            ? {
-                ...row,
-                likedByMe: item.likedByMe,
-                likeCount: item.likeCount,
-              }
-            : row,
-        ),
-      );
-    }
   }, []);
+
+  const toggleLike = useCallback(
+    async (item: FeedItem) => {
+      const nextLiked = !item.likedByMe;
+      applyLikeState(item, nextLiked);
+      try {
+        if (nextLiked) await mobileApi.like(item.id);
+        else await mobileApi.unlike(item.id);
+      } catch {
+        applyLikeState(item, item.likedByMe);
+      }
+    },
+    [applyLikeState],
+  );
+
+  const likeOnly = useCallback(
+    async (item: FeedItem) => {
+      if (item.likedByMe) return;
+      applyLikeState(item, true);
+      try {
+        await mobileApi.like(item.id);
+      } catch {
+        applyLikeState(item, false);
+      }
+    },
+    [applyLikeState],
+  );
 
   const sendComment = useCallback(async () => {
     if (!commentsVideoId || !commentDraft.trim() || sending) return;
     setSending(true);
     try {
       const created = await mobileApi.createComment(commentsVideoId, { body: commentDraft.trim() });
-      const sessionName = '我';
       setComments((prev) => [
         {
           ...created,
           author: {
             id: created.userId,
-            displayName: sessionName,
+            displayName: '我',
             avatarUrl: null,
           },
         },
@@ -218,10 +362,30 @@ export default function FeedScreen() {
     const first = viewableItems.find((v) => v.isViewable);
     if (first?.item && typeof first.item === 'object' && 'id' in first.item) {
       setActiveId((first.item as FeedItem).id);
+      if (typeof first.index === 'number' && first.index >= 0) {
+        setActiveIndex(first.index);
+      }
     }
   }).current;
 
   const viewabilityConfig = useMemo(() => ({ itemVisiblePercentThreshold: 80 }), []);
+
+  const onScrollEndDrag = useCallback(
+    (e: { nativeEvent: NativeScrollEvent }) => {
+      const y = e.nativeEvent.contentOffset.y;
+      // Pull down past the first page → refresh when already at top
+      if (activeIndex <= 0 && y < -48) {
+        void load(true);
+        return;
+      }
+      // Soft pull while not at first item: snap to previous page
+      if (activeIndex > 0 && y < activeIndex * pageHeight - 40) {
+        const prev = Math.max(0, activeIndex - 1);
+        listRef.current?.scrollToIndex({ index: prev, animated: true });
+      }
+    },
+    [activeIndex, load, pageHeight],
+  );
 
   if (loading) {
     return (
@@ -279,6 +443,7 @@ export default function FeedScreen() {
         </View>
       ) : (
         <FlatList
+          ref={listRef}
           data={items}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
@@ -288,6 +453,7 @@ export default function FeedScreen() {
               height={pageHeight}
               onOpenComments={() => void openComments(item.id)}
               onToggleLike={() => void toggleLike(item)}
+              onLikeOnly={() => void likeOnly(item)}
             />
           )}
           pagingEnabled
@@ -299,10 +465,16 @@ export default function FeedScreen() {
             offset: pageHeight * index,
             index,
           })}
-          onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
-            // keep for potential progress later
-            void e;
-          }}
+          onScrollEndDrag={onScrollEndDrag}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => void load(true)}
+              tintColor="#fe2c55"
+              progressViewOffset={insets.top + 48}
+              enabled={activeIndex === 0}
+            />
+          }
         />
       )}
 
@@ -366,15 +538,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
-  page: { width: '100%', backgroundColor: '#000' },
-  gradient: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'transparent',
-  },
+  page: { width: SCREEN_WIDTH, backgroundColor: '#000', overflow: 'hidden' },
   topTabs: {
     position: 'absolute',
     top: 0,
@@ -394,11 +558,39 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: '#fff',
   },
+  pauseBadge: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pauseBadgeText: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 42,
+    textShadowColor: 'rgba(0,0,0,0.45)',
+    textShadowRadius: 8,
+  },
+  heartBurst: {
+    position: 'absolute',
+    top: '38%',
+    alignSelf: 'center',
+    left: SCREEN_WIDTH / 2 - 48,
+  },
+  heartBurstText: {
+    fontSize: 96,
+    color: '#fe2c55',
+    textShadowColor: 'rgba(0,0,0,0.35)',
+    textShadowRadius: 10,
+  },
   rightRail: {
     position: 'absolute',
     right: 10,
     alignItems: 'center',
     gap: 18,
+    zIndex: 5,
   },
   avatarWrap: { alignItems: 'center', marginBottom: 8 },
   avatar: {
@@ -426,7 +618,7 @@ const styles = StyleSheet.create({
   actionIcon: { fontSize: 32, color: '#fff', textShadowColor: 'rgba(0,0,0,0.45)', textShadowRadius: 4 },
   liked: { color: '#fe2c55' },
   actionCount: { color: '#fff', fontSize: 12, fontWeight: '600' },
-  meta: { position: 'absolute', left: 12, right: 88 },
+  meta: { position: 'absolute', left: 12, right: 88, zIndex: 5 },
   author: { color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 6 },
   caption: { color: '#fff', fontSize: 14, lineHeight: 20 },
   error: { color: '#fe2c55', marginBottom: 12, textAlign: 'center' },

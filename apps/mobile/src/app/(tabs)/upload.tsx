@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
+import * as VideoThumbnails from 'expo-video-thumbnails';
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -17,6 +18,7 @@ import { router } from 'expo-router';
 import { mobileApi } from '@/lib/api';
 
 const PLACEHOLDER_VIDEO_URL = 'https://example.com/demo.mp4';
+const PLACEHOLDER_COVER_URL = 'https://picsum.photos/seed/douyin-cover/720/1280';
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) {
@@ -42,21 +44,42 @@ export default function UploadScreen() {
         throw new Error('请填写标题');
       }
 
-      const uploadTicket = await mobileApi.requestUpload();
-      const nextNote = uploadTicket.mock
-        ? '当前为 Mock Blob 模式，已用占位地址创建审核记录'
-        : '视频已上传至 Blob，正在创建审核记录';
-      const blobUrl = uploadTicket.mock
-        ? PLACEHOLDER_VIDEO_URL
-        : (await mobileApi.uploadVideo(uploadTicket, asset)).url;
+      const videoTicket = await mobileApi.requestUpload('video');
+      let blobUrl = PLACEHOLDER_VIDEO_URL;
+      let coverUrl: string | undefined = PLACEHOLDER_COVER_URL;
 
-      setUploadNote(nextNote);
+      if (videoTicket.mock) {
+        setUploadNote('当前为 Mock Blob 模式，已用占位地址创建审核记录');
+      } else {
+        blobUrl = (await mobileApi.uploadVideo(videoTicket, asset)).url;
+
+        try {
+          const thumb = await VideoThumbnails.getThumbnailAsync(asset.uri, {
+            time: 0,
+            quality: 0.7,
+          });
+          const coverTicket = await mobileApi.requestUpload('cover');
+          if (!coverTicket.mock) {
+            coverUrl = (
+              await mobileApi.uploadImage(coverTicket, {
+                uri: thumb.uri,
+                fileName: 'cover.jpg',
+                mimeType: 'image/jpeg',
+              })
+            ).url;
+          }
+        } catch {
+          coverUrl = undefined;
+        }
+
+        setUploadNote('视频与封面已上传，正在创建审核记录');
+      }
 
       return mobileApi.createVideo({
         title: title.trim(),
         description: description.trim(),
         blobUrl,
-        coverUrl: undefined,
+        coverUrl,
         durationMs: Math.max(asset.duration ?? 15_000, 1),
       });
     },
@@ -96,7 +119,7 @@ export default function UploadScreen() {
       contentContainerStyle={[styles.content, { paddingTop: insets.top + 12, paddingBottom: 40 }]}
     >
       <Text style={styles.title}>发布</Text>
-      <Text style={styles.subtitle}>选择短视频并填写文案，提交后进入后台审核。</Text>
+      <Text style={styles.subtitle}>选择短视频后会自动截取第一帧作为封面。</Text>
 
       <Pressable onPress={() => void pickVideo()} style={styles.pickBtn}>
         <Text style={styles.pickBtnText}>{asset ? '重新选择视频' : '选择视频'}</Text>

@@ -10,9 +10,15 @@ function readTextPart(data: Buffer) {
 }
 
 function assertAllowedPathname(pathname: string, userId: string) {
-  if (!pathname.startsWith(`videos/${userId}/`)) {
+  const allowed = [`videos/${userId}/`, `covers/${userId}/`, `avatars/${userId}/`];
+  if (!allowed.some((prefix) => pathname.startsWith(prefix))) {
     throw new AppError(ErrorCode.AUTH_FORBIDDEN, 'Upload pathname does not belong to the current user', 403);
   }
+}
+
+function defaultContentType(pathname: string) {
+  if (pathname.startsWith('videos/')) return 'video/mp4';
+  return 'image/jpeg';
 }
 
 export default defineEventHandler(async (event) => {
@@ -34,13 +40,13 @@ export default defineEventHandler(async (event) => {
     assertAllowedPathname(pathname, user.id);
 
     if (!file?.data?.length) {
-      throw new AppError(ErrorCode.VALIDATION_FAILED, 'Video file is required', 400);
+      throw new AppError(ErrorCode.VALIDATION_FAILED, 'Upload file is required', 400);
     }
 
     return await put(pathname, file.data, {
       access: 'public',
       addRandomSuffix: true,
-      contentType: file.type || 'video/mp4',
+      contentType: file.type || defaultContentType(pathname),
       token: blobToken,
     });
   } catch (err) {
